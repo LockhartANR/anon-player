@@ -1,0 +1,27 @@
+{
+  "name": "anon-player",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "test": "node --test tests/*.test.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@putianyi888/vue3-minesweeper-board": "0.7.0",
+    "jsep": "1.4.0",
+    "mediabunny": "1.66.0",
+    "ms-toollib": "1.6.0",
+    "vue": "3.5.45"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@vitejs/plugin-vue": "6.0.10",
+    "typescript": "6.0.3",
+    "vite": "8.3.6",
+    "vite-plugin-wasm": "3.6.0",
+    "vue-tsc": "3.3.14"
+  }
+}

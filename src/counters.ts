@@ -30,6 +30,10 @@ export const defaultCounterRows: readonly (readonly [string, string])[] = [
   ['mov', 'roundTo(path / 16, 3) || "@" || roundTo(path / 16 / bbbv_solved * bbbv_s, 3)'],
 ];
 
+export function createDefaultCounters(): Counter[] {
+  return defaultCounterRows.map(([name, formula]) => ({ id: crypto.randomUUID(), name, formula }));
+}
+
 function numeric(value: CounterValue): number {
   return typeof value === 'number' ? value : typeof value === 'object' ? value.value : NaN;
 }
@@ -142,12 +146,11 @@ export function saveCounters(counters: readonly Counter[]) {
 }
 
 export function readCounters(): Counter[] {
-  const defaults = () => defaultCounterRows.map(([name, formula]) => ({ id: crypto.randomUUID(), name, formula }));
   try {
     const saved = localStorage.getItem(storageKey);
     // A saved empty array is intentional, and must not be replaced by defaults.
     if (saved !== null) return parseCounterConfig(saved);
-    const counters = defaults();
+    const counters = createDefaultCounters();
     const legacy: unknown = JSON.parse(localStorage.getItem(legacyKey) ?? '[]');
     if (Array.isArray(legacy)) for (const row of legacy) {
       if (typeof row?.name !== 'string' || typeof row.formula !== 'string'
@@ -160,5 +163,5 @@ export function readCounters(): Counter[] {
     }
     try { saveCounters(counters); } catch { /* Keep migrated rows usable even when browser storage is full. */ }
     return counters;
-  } catch { return defaults(); }
+  } catch { return createDefaultCounters(); }
 }

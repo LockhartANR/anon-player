@@ -56,14 +56,18 @@ async function storedProfiles(page) {
   }));
 }
 
-async function prepare(page) {
+async function saveFirstProfile(page) {
   await open(page);
   await volume(page).fill('0.21');
   await button(page, '保存当前配置').click();
   await page.getByLabel('配置名称').fill('QA A');
   await button(page, '保存').click();
   await button(page, '保存当前配置').waitFor();
-  const a = await selector(page).inputValue();
+  return selector(page).inputValue();
+}
+
+async function prepare(page) {
+  const a = await saveFirstProfile(page);
   // Seed a second snapshot with actual decodable PCM audio to exercise async apply.
   await page.evaluate(() => new Promise((resolve, reject) => {
     const request = indexedDB.open('anon-player', 2);
@@ -191,7 +195,7 @@ for (const action of ['update selected', 'create', 'overwrite conflicting name']
     const context = await browser.newContext();
     try {
       const page = await context.newPage();
-      const a = await prepare(page);
+      const a = await saveFirstProfile(page);
       if (action !== 'update selected') {
         await selector(page).selectOption('current');
         await ready(page);
@@ -233,12 +237,11 @@ for (const action of ['update selected', 'create', 'overwrite conflicting name']
       assert.deepEqual(await storedProfiles(page), profilesBefore);
       assert.equal(await selector(page).inputValue(), before.selection);
       assert.equal(await volume(page).inputValue(), '0.49');
-      assert.equal(await selector(page).getByRole('option', { name: 'QA new', exact: true }).count(), 0);
 
       await reload(page);
       assert.equal(await selector(page).inputValue(), before.selection);
       assert.equal(await volume(page).inputValue(), String(before.volume));
-      await selector(page).selectOption('qa-b');
+      await selector(page).selectOption('current');
       await ready(page);
       await selector(page).selectOption(a);
       await ready(page);

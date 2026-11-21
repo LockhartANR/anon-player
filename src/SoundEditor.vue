@@ -110,6 +110,11 @@ async function selectProfile(event: Event) {
     return;
   }
 
+  await applySelectedProfile(id);
+  select.value = selectedProfileId.value;
+}
+
+async function applySelectedProfile(id: string, fallbackMessage = '无法应用并保存所选音效配置。') {
   emit('switchProfile');
   profileBusy.value = true;
   try {
@@ -119,11 +124,17 @@ async function selectProfile(event: Event) {
     else await props.applyProfile(await readSoundProfile(id), id);
     selectedProfileId.value = id;
   } catch (error) {
-    profileError.value = error instanceof Error ? error.message : '无法应用并保存所选音效配置。';
+    profileError.value = error instanceof Error ? error.message : fallbackMessage;
   } finally {
-    select.value = selectedProfileId.value;
     profileBusy.value = false;
   }
+}
+
+async function restoreDefaultSounds() {
+  if (editorDisabled.value || profilesLoading.value) return;
+  if (!window.confirm('恢复项目默认音效？当前音量、音效分组和导入的音效将被替换。')) return;
+  closeSaveForm();
+  await applySelectedProfile('default', '无法恢复默认音效。');
 }
 
 function openSaveForm() {
@@ -173,7 +184,7 @@ onMounted(() => { void refreshProfiles(); });
     <VolumeSlider class="master-volume" label="总音量" :value="settings.volume" :disabled="editorDisabled"
       @input="emit('mix', { ...settings, volume: $event })" @commit="emit('saveMix')" />
     <section class="sound-profile-section" aria-label="音效配置">
-      <div class="panel-heading"><h3>配置</h3></div>
+      <div class="panel-heading"><h3>配置</h3><button class="text-button sound-reset" type="button" :disabled="editorDisabled || profilesLoading" @click="restoreDefaultSounds">恢复默认音效</button></div>
       <label class="field-label" for="sound-profile">选择配置</label>
       <select id="sound-profile" :value="selectedProfileId" :disabled="editorDisabled || profilesLoading" @change="selectProfile">
         <option value="current">当前工作设置</option>

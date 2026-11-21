@@ -3,17 +3,21 @@ import type { BoardRenderFrame } from '@putianyi888/vue3-minesweeper-board';
 import { chordCell, pressedBackground } from './boardPress';
 import { compileCounters, formatCounterValue } from './counters';
 import type { Counter } from './counters';
+import logoUrl from './favicon.png';
 import type { Frame, Replay } from './replay';
 
 const width = 1280;
 const sideX = 842;
 const sideWidth = 406;
+const nameWidth = 138;
 const rowHeight = 34;
 const font = 'system-ui, "Microsoft YaHei", sans-serif';
 const muted = '#536176';
 const text = '#283344';
 const accent = '#18579f';
-const line = '#d8dee8';
+const line = '#9aa8b8';
+const nameFill = '#e8edf4';
+const valueFill = '#fff';
 
 export function createExportPicture(counters: Counter[], outputWidth: number, outputHeight: number) {
   const canvas = document.createElement('canvas');
@@ -24,6 +28,9 @@ export function createExportPicture(counters: Counter[], outputWidth: number, ou
   const context = canvas.getContext('2d', { alpha: false });
   if (!context) throw new Error('无法创建视频绘制画布。');
   const ctx = context;
+  const logo = new Image();
+  logo.src = logoUrl;
+  let logoReady: Promise<void> | undefined;
   const scale = Math.min(outputWidth / width, outputHeight / height);
   ctx.fillStyle = '#f4f6f9';
   ctx.fillRect(0, 0, outputWidth, outputHeight);
@@ -48,13 +55,13 @@ export function createExportPicture(counters: Counter[], outputWidth: number, ou
 
   function row(name: string, value: string, y: number) {
     rect(line, sideX, y, sideWidth, rowHeight);
-    rect('#f4f6f9', sideX + 1, y + 1, 234, rowHeight - 1);
-    rect('#fff', sideX + 236, y + 1, sideWidth - 237, rowHeight - 1);
+    rect(nameFill, sideX + 1, y + 1, nameWidth - 2, rowHeight - 2);
+    rect(valueFill, sideX + nameWidth + 1, y + 1, sideWidth - nameWidth - 2, rowHeight - 2);
     ctx.font = `16px ${font}`;
-    label(name, sideX + 12, y + 22, 212, muted);
+    label(name, sideX + 10, y + 22, nameWidth - 20, muted);
     ctx.textAlign = 'right';
     ctx.font = `600 17px ${font}`;
-    label(value, sideX + sideWidth - 12, y + 22, sideWidth - 254);
+    label(value, sideX + sideWidth - 10, y + 22, sideWidth - nameWidth - 20);
     ctx.textAlign = 'left';
   }
 
@@ -62,6 +69,8 @@ export function createExportPicture(counters: Counter[], outputWidth: number, ou
     canvas,
     async draw(replay: Replay, ms: number, signal: AbortSignal) {
       if (lastReplay === replay && lastMs === ms) return;
+      await (logoReady ??= logo.decode());
+      signal.throwIfAborted();
       const frame = replay.frameAt(ms);
       const press = chordCell(frame);
       const size = Math.min(42, 774 / replay.columns, (height - 204) / replay.rows);
@@ -78,10 +87,11 @@ export function createExportPicture(counters: Counter[], outputWidth: number, ou
       const board = cachedBoard!;
       rect('#f4f6f9', 0, 0, width, height);
       rect('#fff', 24, 18, width - 48, 62);
+      ctx.drawImage(logo, 38, 30, 34, 34);
       ctx.font = `700 23px ${font}`;
-      label('Anon Player', 38, 55, 173, accent);
+      label('Anon Player', 82, 55, 158, accent);
       ctx.font = `17px ${font}`;
-      label(replay.filename, 221, 55, 720);
+      label(replay.filename, 260, 55, 680);
       ctx.textAlign = 'right';
       const result = replay.completed ? '完成' : '未完成';
       label(`${replay.format}  ·  ${replay.columns} × ${replay.rows}  ·  ${result}`, 1237, 55, 268, muted);

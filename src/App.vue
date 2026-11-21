@@ -112,6 +112,23 @@ function restart() {
   if (resume) startClock(true);
 }
 
+function stopReplayPlayback() {
+  pauseClock();
+  seeking.value = false;
+  resumeAfterSeek = false;
+}
+
+function closeReplay() {
+  activeLoad?.abort();
+  stopReplayPlayback();
+  replay.value?.close();
+  replay.value = undefined;
+  setPosition(0);
+  includeStart = true;
+  fileError.value = '';
+  sound.configure([], settings.value);
+}
+
 function setRate(next: number) {
   const resume = playing.value;
   if (resume) pauseClock();
@@ -145,9 +162,7 @@ async function loadReplay(source: 'local' | 'openms', read: (signal: AbortSignal
   activeLoad?.abort();
   const request = new AbortController();
   activeLoad = request;
-  pauseClock();
-  seeking.value = false;
-  resumeAfterSeek = false;
+  stopReplayPlayback();
   fileError.value = '';
   loadSource.value = source;
   try {
@@ -382,7 +397,7 @@ onBeforeUnmount(() => {
     <div class="topbar-actions">
       <button class="button secondary" type="button" @click="openExportDialog"><Icon name="film" :size="17" /> 导出 MP4</button>
       <button class="button primary" type="button" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 导入录像</button>
-      <button v-if="replay" class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
+      <button class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
     </div>
   </header>
 
@@ -422,10 +437,7 @@ onBeforeUnmount(() => {
         <div v-else class="empty-workbench">
           <div class="empty-icon"><Icon name="upload" :size="30" /></div>
           <h3>{{ loading ? '正在读取录像' : '拖入扫雷录像' }}</h3>
-          <div class="empty-actions">
-            <button type="button" class="button secondary" :disabled="loading" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 选择本地文件</button>
-            <button type="button" class="button secondary" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
-          </div>
+          <button type="button" class="button secondary" :disabled="loading" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 选择本地文件</button>
           <div class="formats" aria-label="支持格式"><span v-for="format in ['EVF', 'AVF', 'MVF', 'RMV']" :key="format">{{ format }}</span></div>
         </div>
         <div v-if="dragDepth > 0 && frame" class="drop-overlay">松开以打开录像</div>
@@ -442,6 +454,7 @@ onBeforeUnmount(() => {
           <button type="button" class="icon-button transport-icon" :disabled="!replay || loading" aria-label="回到开头" title="回到开头" @click="restart"><Icon name="restart" /></button>
           <label class="speed-select"><select aria-label="播放倍速" :value="rate" @change="setRate(Number(($event.target as HTMLSelectElement).value))"><option v-for="speed in rates" :key="speed" :value="speed">{{ speed }}×</option></select></label>
           <button type="button" class="icon-button transport-icon" :disabled="!soundsReady" :aria-label="settings.muted ? '取消静音' : '静音'" :title="settings.muted ? '取消静音' : '静音'" :aria-pressed="settings.muted" @click="toggleMute"><Icon :name="settings.muted ? 'muted' : 'volume'" /></button>
+          <button v-if="replay" type="button" class="icon-button transport-icon close-replay" aria-label="关闭录像" title="关闭录像" @click="closeReplay"><Icon name="close" /></button>
         </div>
       </div>
     </section>

@@ -12,6 +12,7 @@ const paths: Record<string, string> = {
   sound: 'M3 12h3l3-7 4 14 3-7h5', plus: 'M12 5v14 M5 12h14',
   edit: 'M5 16l11-11 3 3L8 19H5z M14 7l3 3', trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 10v6 M14 10v6',
   up: 'M6 14l6-6 6 6', down: 'M6 10l6 6 6-6',
+  grip: 'M9 5h.01 M15 5h.01 M9 12h.01 M15 12h.01 M9 19h.01 M15 19h.01',
 };
 defineProps<{ name: string; size?: number }>();
 </script>

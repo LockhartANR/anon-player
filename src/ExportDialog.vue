@@ -17,8 +17,9 @@ const replays = ref<ExportReplay[]>([]);
 const onlineInput = ref('');
 const error = ref('');
 const status = ref('');
-const loading = ref(false);
-const exporting = ref(false);
+const inputController = shallowRef<AbortController>();
+const musicDownload = ref<{ name: string; received: number; total?: number; decoding: boolean }>();
+const job = shallowRef<AbortController>();
 const progress = ref(0);
 const musicFile = ref<HTMLInputElement>();
 const music = shallowRef<{ selection: string; name: string; buffer: AudioBuffer }>();
@@ -36,12 +37,17 @@ const width = ref<number | ''>(defaultPreset.width);
 const height = ref<number | ''>(defaultPreset.height);
 const fps = ref<number | ''>(defaultPreset.fps);
 const mbps = ref<number | ''>(defaultPreset.mbps);
-let inputController: AbortController | undefined;
-let job: AbortController | undefined;
 let key = 0;
 let exportRevision = 0;
 
+const loading = computed(() => !!inputController.value);
+const exporting = computed(() => !!job.value);
 const busy = computed(() => loading.value || exporting.value);
+const musicDownloadPercent = computed(() => {
+  const download = musicDownload.value;
+  if (!download?.total) return undefined;
+  return Math.min(100, Math.floor(download.received / download.total * 100));
+});
 const invalidHold = computed(() => replays.value.some((r) => r.holdSeconds !== ''
   && (!Number.isFinite(r.holdSeconds) || r.holdSeconds < 0)));
 const activePreset = computed(() => presets.findIndex((preset) =>
@@ -56,6 +62,7 @@ const videoError = computed(() => {
   if (!Number.isSafeInteger(bitrate.value) || bitrate.value <= 0) return '请输入有效的正数视频码率。';
   return '';
 });
+const canExport = computed(() => !busy.value && replays.value.length > 0 && !invalidHold.value && !videoError.value && props.soundsReady);
 const cues = computed(() => new Map(props.soundsReady ? replays.value.map((replay) => [replay.key,
   planReplayAudio(replay, props.settings, (id) => props.sound.buffer(id))]) : []));
 const plan = computed(() => planExport(replays.value, cues.value, validFps.value ? Number(fps.value) : defaultPreset.fps));
@@ -79,8 +86,8 @@ function open() {
 }
 
 function close() {
-  if (job) { job.abort(); return; }
-  inputController?.abort();
+  if (job.value) { job.value.abort(); return; }
+  inputController.value?.abort();
   dialog.value?.close();
 }
 
@@ -88,17 +95,16 @@ defineExpose({ open });
 
 async function importInput(read: (signal: AbortSignal) => Promise<void>) {
   if (busy.value) return;
-  loading.value = true;
+  const controller = new AbortController();
+  inputController.value = controller;
   error.value = '';
   status.value = '';
-  const controller = new AbortController();
-  inputController = controller;
   try { await read(controller.signal); }
   catch (reason) {
     if (!controller.signal.aborted) error.value = describeError(reason);
   } finally {
-    inputController = undefined;
-    loading.value = false;
+    musicDownload.value = undefined;
+    inputController.value = undefined;
   }
 }
 
@@ -152,11 +158,34 @@ function chooseMusic(event: Event) {
   const track = musicTracks.find(({ id }) => `preset:${id}` === choice);
   if (!track) return;
   void importInput(async (signal) => {
+    musicDownload.value = { name: track.name, received: 0, decoding: false };
+    const download = musicDownload.value;
     const base = new URL(import.meta.env.BASE_URL, document.baseURI);
     const path = track.path.split('/').map((part) => encodeURIComponent(part)).join('/');
     const response = await fetch(new URL(`audio/music/${path}`, base), { signal });
-    if (!response.ok) throw new Error(`无法读取背景音乐「${track.name}」。`);
-    await applyMusic(choice, track.name, await response.blob(), signal);
+    if (!response.ok || !response.body) throw new Error(`无法读取背景音乐「${track.name}」。`);
+
+    const length = Number(response.headers.get('Content-Length'));
+    const encoding = response.headers.get('Content-Encoding');
+    if ((!encoding || encoding === 'identity') && Number.isSafeInteger(length) && length > 0) {
+      download.total = length;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        download.received += value.byteLength;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    signal.throwIfAborted();
+    download.decoding = true;
+    await applyMusic(choice, track.name, new Blob(chunks), signal);
   });
 }
 
@@ -203,19 +232,18 @@ watch([width, height, fps, mbps], () => {
 });
 
 async function startExport() {
-  if (busy.value || !replays.value.length || invalidHold.value || videoError.value || !props.soundsReady) return;
+  if (!canExport.value) return;
   const revision = exportRevision;
   const snapshot = planExport(replays.value.map((replay) => ({ ...replay })), cues.value, Number(fps.value));
   const video = { width: Number(width.value), height: Number(height.value), fps: Number(fps.value), bitrate: bitrate.value };
   const counters = props.counters.map((value) => ({ ...value }));
   const background = music.value ? { buffer: music.value.buffer, volume: musicVolume.value } : undefined;
   const controller = new AbortController();
-  job = controller;
+  job.value = controller;
   discardResult();
   progress.value = 0;
   error.value = '';
   status.value = '';
-  exporting.value = true;
   try {
     const { exportMp4 } = await import('./exportMp4');
     const mp4 = await exportMp4(snapshot, video, counters, background, controller.signal, (ratio) => { progress.value = ratio; });
@@ -232,14 +260,13 @@ async function startExport() {
     else error.value = reason instanceof Error && /[\u3400-\u9fff]/.test(reason.message)
       ? reason.message : 'MP4 编码失败，请尝试调低视频参数、缩短录像列表，或换一个支持编码的浏览器。';
   } finally {
-    exporting.value = false;
-    job = undefined;
+    job.value = undefined;
   }
 }
 
 onBeforeUnmount(() => {
-  inputController?.abort();
-  job?.abort();
+  inputController.value?.abort();
+  job.value?.abort();
   discardResult();
 });
 </script>
@@ -250,6 +277,14 @@ onBeforeUnmount(() => {
       <h2 id="export-title">导出 MP4</h2>
       <button type="button" class="icon-button small" aria-label="关闭导出面板" :disabled="exporting" @click="close"><Icon name="close" :size="18" /></button>
     </header>
+    <div v-if="musicDownload" class="export-download-status" role="status">
+      <span>
+        <template v-if="musicDownload.decoding">正在解码「{{ musicDownload.name }}」…</template>
+        <template v-else-if="musicDownloadPercent !== undefined">正在下载「{{ musicDownload.name }}」 {{ musicDownloadPercent }}%</template>
+        <template v-else>正在下载「{{ musicDownload.name }}」，已接收 {{ (musicDownload.received / 1024).toFixed(0) }} KiB</template>
+      </span>
+      <progress v-if="!musicDownload.decoding" :value="musicDownloadPercent" max="100" aria-label="背景音乐下载进度" />
+    </div>
     <div class="export-body">
       <div class="export-columns">
         <section class="export-list-section" aria-label="录像列表">
@@ -316,7 +351,7 @@ onBeforeUnmount(() => {
       </div>
       <p v-if="invalidHold" class="error-message" role="alert">停留时间须为大于或等于零的秒数。</p>
       <p v-if="error" class="error-message export-error" role="alert">{{ error }}</p>
-      <p v-if="loading" class="muted-text" role="status">正在读取文件…</p>
+      <p v-if="loading && !musicDownload" class="muted-text" role="status">正在读取文件…</p>
       <p v-if="soundStorageUpgradeBlocked" class="error-message" role="status">{{ soundStorageBlockedMessage }}</p>
       <p v-if="status" class="muted-text" role="status">{{ status }}</p>
       <div v-if="exporting" class="export-progress">
@@ -327,7 +362,7 @@ onBeforeUnmount(() => {
     <footer class="export-footer">
       <button v-if="exporting" class="button secondary" type="button" @click="job?.abort()">取消导出</button>
       <template v-else>
-        <button class="button" :class="resultUrl ? 'secondary' : 'primary'" type="button" :disabled="busy || !replays.length || invalidHold || !!videoError || !soundsReady" @click="startExport">{{ resultUrl ? '重新生成' : '生成 MP4' }}</button>
+        <button class="button" :class="resultUrl ? 'secondary' : 'primary'" type="button" :disabled="!canExport" @click="startExport">{{ resultUrl ? '重新生成' : '生成 MP4' }}</button>
         <a v-if="resultUrl" class="button primary" :href="resultUrl" download="Anon Player.mp4">下载 MP4</a>
       </template>
     </footer>

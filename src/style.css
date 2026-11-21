@@ -170,6 +170,8 @@ select { appearance: none; padding-right: 1.85rem; background-image: linear-grad
 .export-dialog[open] { display: flex; flex-direction: column; }
 .export-header, .export-footer { display: flex; align-items: center; gap: .65rem; padding: .8rem 1.1rem; }
 .export-header { justify-content: space-between; border-bottom: 1px solid var(--line); }
+.export-download-status { display: grid; grid-template-columns: minmax(0, 1fr); gap: .35rem; padding: .55rem 1.1rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; }
+.export-download-status progress { width: 100%; accent-color: var(--accent); }
 .export-header h2 { font-size: 1.16rem; }
 .export-footer { justify-content: end; border-top: 1px solid var(--line); }
 .export-footer a { text-decoration: none; }

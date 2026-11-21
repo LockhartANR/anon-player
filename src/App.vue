@@ -382,6 +382,7 @@ onBeforeUnmount(() => {
     <div class="topbar-actions">
       <button class="button secondary" type="button" @click="openExportDialog"><Icon name="film" :size="17" /> 导出 MP4</button>
       <button class="button primary" type="button" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 导入录像</button>
+      <button v-if="replay" class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
     </div>
   </header>
 

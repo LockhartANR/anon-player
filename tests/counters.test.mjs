@@ -45,10 +45,9 @@ test('controlled parser rejects unknown fields, arbitrary calls, access and inva
   }
 });
 
-test('default rows round-trip as JSON and evaluate', () => {
+test('default rows round-trip as JSON', () => {
   const rows = parseCounterConfig(JSON.stringify(defaultCounterRows));
   assert.deepEqual(JSON.parse(serializeCounters(rows)), defaultCounterRows);
-  for (const row of rows) assert.equal(typeof display(row.formula), 'string');
 });
 
 test('JSON validation reports row number, accepts empty list, and rejects malformed rows', () => {

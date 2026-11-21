@@ -15,7 +15,7 @@ const binary: Record<string, (a: number, b: number) => number> = {
 };
 
 export const defaultCounterRows: readonly (readonly [string, string])[] = [
-  ['time', 'roundTo(bbbv_solved / bbbv_s, 3) || "@" || roundTo(etime, 3) || "/" || roundTo(rtime, 3)'],
+  ['time', 'roundTo(etime, 3) || "/" || roundTo(rtime, 3)'],
   ['3bv', 'bbbv_solved || "/" || bbbv'],
   ['bvs', 'roundTo(bbbv_s, 3)'],
   ['stnb', 'roundTo(stnb, 3)'],

@@ -149,7 +149,13 @@ input[type='range'] { accent-color: var(--accent); min-width: 0; }
 .play-button:hover:not(:disabled) { background: var(--accent-strong); }
 .play-button:disabled { color: var(--muted); background: var(--inset); border-color: var(--line); opacity: 1; }
 .transport-icon { background: var(--surface); border-color: var(--line); }
-.queue-current { margin-left: auto; }
+.player-replay-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-left: auto; }
+.replay-open { position: relative; display: flex; }
+.replay-open-main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.replay-source-toggle { width: 30px; padding: 0; border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.replay-source-options { position: absolute; left: 0; bottom: calc(100% + .4rem); z-index: 5; padding: .3rem; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); box-shadow: 0 4px 16px #152b4726; }
+.replay-source-options .button:hover { background: var(--accent-tint); color: var(--accent-strong); }
+.queue-hint { margin-top: .5rem; text-align: right; }
 .queue-current:disabled { opacity: .65; }
 select { height: 36px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 .65rem; }
 select { appearance: none; padding-right: 1.85rem; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 14px) 50%, calc(100% - 10px) 50%; background-size: 4px 4px; background-repeat: no-repeat; }
@@ -301,6 +307,9 @@ select { appearance: none; padding-right: 1.85rem; background-image: linear-grad
   .stats-panel, .sound-editor { padding: .8rem; }
 }
 @media (max-width: 620px) {
+  .player-replay-actions { flex-basis: 100%; margin-left: 0; }
+  .player-replay-actions .button { font-size: .84rem; padding-inline: .5rem; }
+  .player-replay-actions .replay-source-toggle { width: 28px; padding: 0; }
   .export-item { grid-template-columns: minmax(0, 1fr) auto; }
   .export-replay-text { grid-column: 1 / -1; }
   .export-order { justify-content: end; }

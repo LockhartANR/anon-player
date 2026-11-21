@@ -16,6 +16,11 @@ import { cloneSoundSettings, defaultSounds, readSoundProfile, readSounds, saveSo
 import type { GroupKey, SoundAsset, SoundSettings } from './soundSettings';
 
 const fileInput = ref<HTMLInputElement>();
+const replayOpener = ref<HTMLDivElement>();
+const replayOpenButton = ref<HTMLButtonElement>();
+const replaySourceToggle = ref<HTMLButtonElement>();
+const replaySourcesOpen = ref(false);
+const showQueueHint = ref(false);
 const exportPanel = ref<InstanceType<typeof ExportPanel>>();
 const exportQueue = shallowRef<ExportReplay[]>([]);
 const currentExportReplay = shallowRef<ExportReplay>();
@@ -50,6 +55,7 @@ let resumeAfterSeek = false;
 let audioLoadId = 0;
 let soundProfileRevision = 0;
 let disposed = false;
+let queueHintTimer = 0;
 
 const duration = computed(() => replay.value?.durationMs ?? 0);
 const progress = computed(() => duration.value ? 100 * position.value / duration.value : 0);
@@ -166,6 +172,7 @@ function endSeek() {
 }
 
 async function loadReplay(source: 'local' | 'openms', read: (signal: AbortSignal) => Promise<{ filename: string; bytes: ArrayBuffer }>): Promise<boolean> {
+  replaySourcesOpen.value = false;
   activeLoad?.abort();
   const request = new AbortController();
   activeLoad = request;
@@ -213,15 +220,39 @@ function loadFiles(files: File[]) {
   void loadReplay('local', async () => ({ filename: file.name, bytes: await file.arrayBuffer() }));
 }
 
+function openLocalReplay() {
+  replaySourcesOpen.value = false;
+  fileInput.value?.click();
+}
+
+function dismissReplaySources(event: PointerEvent | FocusEvent) {
+  const target = event.type === 'focusout' ? (event as FocusEvent).relatedTarget : event.target;
+  if (!replayOpener.value?.contains(target as Node | null)) replaySourcesOpen.value = false;
+}
+
+function escapeReplaySources(event: KeyboardEvent) {
+  if (!replaySourcesOpen.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  replaySourcesOpen.value = false;
+  replaySourceToggle.value?.focus();
+}
+
 function openOnlineDialog() {
+  if (replaySourcesOpen.value) replaySourceToggle.value?.focus();
+  replaySourcesOpen.value = false;
   onlineError.value = '';
   onlineDialog.value?.showModal();
 }
 
-function queueCurrentReplay() {
+function queueCurrentReplay(event: MouseEvent) {
   const entry = currentExportReplay.value;
   if (!entry || !canQueueCurrentReplay.value) return;
+  if (document.activeElement === event.currentTarget) replayOpenButton.value?.focus({ preventScroll: true });
   exportQueue.value = [...exportQueue.value, entry];
+  showQueueHint.value = true;
+  window.clearTimeout(queueHintTimer);
+  queueHintTimer = window.setTimeout(() => { showQueueHint.value = false; }, 5000);
 }
 
 function closeOnlineDialog() {
@@ -368,6 +399,7 @@ async function previewSound(group: GroupKey, id: string) {
 const counters = ref(readCounters());
 
 onMounted(async () => {
+  window.addEventListener('pointerdown', dismissReplaySources);
   window.addEventListener('pointerup', endSeek);
   window.addEventListener('pointercancel', endSeek);
   try {
@@ -391,6 +423,8 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(animation);
   window.removeEventListener('pointerup', endSeek);
   window.removeEventListener('pointercancel', endSeek);
+  window.removeEventListener('pointerdown', dismissReplaySources);
+  window.clearTimeout(queueHintTimer);
   sound.dispose();
   replay.value?.close();
 });
@@ -404,7 +438,7 @@ onBeforeUnmount(() => {
     </div>
     <input ref="fileInput" type="file" accept=".evf,.avf,.mvf,.rmv" hidden aria-label="录像文件" @change="chooseFile" />
     <div class="topbar-actions">
-      <button class="button primary" type="button" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 导入录像</button>
+      <button class="button primary" type="button" @click="openLocalReplay"><Icon name="upload" :size="17" /> 导入录像</button>
       <button class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
     </div>
   </header>
@@ -447,7 +481,7 @@ onBeforeUnmount(() => {
           <div class="empty-icon"><Icon name="upload" :size="30" /></div>
           <h3>{{ loading ? '正在读取录像' : '拖入扫雷录像' }}</h3>
           <div class="empty-actions">
-            <button type="button" class="button secondary" :disabled="loading" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 选择本地文件</button>
+            <button type="button" class="button secondary" :disabled="loading" @click="openLocalReplay"><Icon name="upload" :size="17" /> 选择本地文件</button>
             <button type="button" class="button secondary" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
           </div>
           <div class="formats" aria-label="支持格式"><span v-for="format in ['EVF', 'AVF', 'MVF', 'RMV']" :key="format">{{ format }}</span></div>
@@ -466,10 +500,26 @@ onBeforeUnmount(() => {
           <button type="button" class="icon-button transport-icon" :disabled="!replay || loading" aria-label="回到开头" title="回到开头" @click="restart"><Icon name="restart" /></button>
           <label class="speed-select"><select aria-label="播放倍速" :value="rate" @change="setRate(Number(($event.target as HTMLSelectElement).value))"><option v-for="speed in rates" :key="speed" :value="speed">{{ speed }}×</option></select></label>
           <button type="button" class="icon-button transport-icon" :disabled="!soundsReady" :aria-label="settings.muted ? '取消静音' : '静音'" :title="settings.muted ? '取消静音' : '静音'" :aria-pressed="settings.muted" @click="toggleMute"><Icon :name="settings.muted ? 'muted' : 'volume'" /></button>
-          <button type="button" class="button secondary queue-current" :disabled="!canQueueCurrentReplay" @click="queueCurrentReplay">
-            <Icon v-if="!currentReplayQueued" name="plus" :size="16" />{{ currentReplayQueued ? '已加入导出队列' : '加入导出队列' }}
-          </button>
+          <div class="player-replay-actions">
+            <div ref="replayOpener" class="replay-open" @focusout="dismissReplaySources"
+              @keydown.esc="escapeReplaySources">
+              <button ref="replayOpenButton" type="button" class="button replay-open-main" :class="currentReplayQueued ? 'primary' : 'secondary'" :disabled="loading" @click="openLocalReplay">
+                <Icon name="upload" :size="17" />{{ currentReplayQueued ? '打开下一个' : '打开录像' }}
+              </button>
+              <button ref="replaySourceToggle" type="button" class="button secondary replay-source-toggle" aria-label="选择录像来源"
+                aria-controls="replay-source-options" :aria-expanded="replaySourcesOpen" :disabled="loading" @click="replaySourcesOpen = !replaySourcesOpen">
+                <Icon name="down" :size="15" />
+              </button>
+              <div v-if="replaySourcesOpen" id="replay-source-options" class="replay-source-options" role="group" aria-label="录像来源">
+                <button type="button" class="button" @click="openOnlineDialog"><Icon name="link" :size="17" />打开 OpenMS 录像</button>
+              </div>
+            </div>
+            <button type="button" class="button secondary queue-current" :disabled="!canQueueCurrentReplay" @click="queueCurrentReplay">
+              <Icon v-if="!currentReplayQueued" name="plus" :size="16" />{{ currentReplayQueued ? '已加入导出队列' : '加入导出队列' }}
+            </button>
+          </div>
         </div>
+        <p v-if="showQueueHint && currentReplayQueued && !loading" class="queue-hint muted-text" role="status">已加入，可打开或拖入下一个录像。</p>
       </div>
     </section>
 

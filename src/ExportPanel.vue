@@ -22,7 +22,7 @@ const progress = ref(0);
 const musicFile = ref<HTMLInputElement>();
 const music = shallowRef<{ selection: string; name: string; buffer: AudioBuffer }>();
 const musicSelection = computed(() => music.value?.selection ?? 'none');
-const musicVolume = ref(.25);
+const musicVolume = ref(.5);
 const resultUrl = ref('');
 const presets = [
   { label: '720p · 30 fps', width: 1280, height: 720, fps: 30, mbps: 2.5 },

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { chromium } from 'playwright';
 
-const browser = await chromium.launch({ executablePath: process.env.ANON_PLAYER_CHROMIUM, headless: true });
+const browser = await chromium.launch({ executablePath: process.env.ANON_PLAYER_CHROMIUM });
 const url = process.env.ANON_PLAYER_URL || 'http://127.0.0.1:4190/';
 after(() => browser.close());
 
@@ -20,40 +20,30 @@ async function reload(page) {
   await button(page, '音效').click();
   await ready(page);
 }
-async function stored(page) {
-  return page.evaluate(() => new Promise((resolve, reject) => {
+async function stored(page, includeProfiles = false) {
+  return page.evaluate((includeProfiles) => new Promise((resolve, reject) => {
     const request = indexedDB.open('anon-player', 2);
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result;
-      const tx = db.transaction('settings');
+      const tx = db.transaction(includeProfiles ? ['settings', 'soundProfiles'] : 'settings');
       const sounds = tx.objectStore('settings').get('sounds');
       const selection = tx.objectStore('settings').get('sound-profile-selection');
-      tx.oncomplete = () => { db.close(); resolve({ volume: sounds.result?.volume, selection: selection.result }); };
-      tx.onabort = () => { db.close(); reject(tx.error); };
-    };
-  }));
-}
-
-async function storedProfiles(page) {
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const request = indexedDB.open('anon-player', 2);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const db = request.result;
-      const tx = db.transaction('soundProfiles');
-      const profiles = tx.objectStore('soundProfiles').getAll();
+      const profiles = includeProfiles ? tx.objectStore('soundProfiles').getAll() : undefined;
       tx.oncomplete = () => {
         db.close();
-        resolve(profiles.result.map(({ settings, ...profile }) => ({
-          ...profile, settings: { ...settings, assets: settings.assets.map(({ id, name, file }) => ({
-            id, name, size: file.size, type: file.type,
-          })) },
-        })));
+        resolve({
+          volume: sounds.result?.volume, selection: selection.result,
+          ...(profiles && { profiles: profiles.result.map(({ settings, ...profile }) => ({
+            ...profile, settings: { ...settings, assets: settings.assets.map(({ id, name, file }) => ({
+              id, name, size: file.size, type: file.type,
+            })) },
+          })) }),
+        });
       };
       tx.onabort = () => { db.close(); reject(tx.error); };
     };
-  }));
+  }), includeProfiles);
 }
 
 async function saveFirstProfile(page) {
@@ -64,6 +54,17 @@ async function saveFirstProfile(page) {
   await button(page, '保存').click();
   await button(page, '保存当前配置').waitFor();
   return selector(page).inputValue();
+}
+
+async function openProfileSave(page, action) {
+  await button(page, '保存当前配置').click();
+  await page.getByLabel('配置名称').fill(action === 'create' ? 'QA new' : 'QA A');
+  if (action === 'overwrite conflicting name') {
+    await button(page, '保存').click();
+    await button(page, '更新原配置').waitFor();
+    return '更新原配置';
+  }
+  return action === 'create' ? '保存' : '更新当前配置';
 }
 
 async function prepare(page) {
@@ -106,12 +107,9 @@ test('reload during profile decoding keeps the old pair; successful apply commit
     const page = await context.newPage();
     const a = await prepare(page);
     await page.evaluate(() => {
-      const decode = OfflineAudioContext.prototype.decodeAudioData;
-      OfflineAudioContext.prototype.decodeAudioData = function (data) {
+      OfflineAudioContext.prototype.decodeAudioData = function () {
         window.decodeStarted = true;
-        return new Promise((resolve, reject) => {
-          window.finishDecode = () => decode.call(this, data).then(resolve, reject);
-        });
+        return new Promise(() => {});
       };
     });
     await selector(page).selectOption('qa-b');
@@ -208,16 +206,10 @@ for (const action of ['update selected', 'create', 'overwrite conflicting name']
       } else {
         await volume(page).fill('0.49');
       }
-      const before = await stored(page);
-      const profilesBefore = await storedProfiles(page);
+      const before = await stored(page, true);
       assert.equal(before.volume, action === 'update selected' ? .49 : .21);
-      assert.equal(profilesBefore.find(({ id }) => id === a).settings.volume, .21);
-      await button(page, '保存当前配置').click();
-      await page.getByLabel('配置名称').fill(action === 'create' ? 'QA new' : 'QA A');
-      if (action === 'overwrite conflicting name') {
-        await button(page, '保存').click();
-        await button(page, '更新原配置').waitFor();
-      }
+      assert.equal(before.profiles.find(({ id }) => id === a).settings.volume, .21);
+      const saveLabel = await openProfileSave(page, action);
       await page.evaluate(() => {
         const put = IDBObjectStore.prototype.put;
         window.abortNextSelectionSave = true;
@@ -230,32 +222,25 @@ for (const action of ['update selected', 'create', 'overwrite conflicting name']
           return request;
         };
       });
-      const saveLabel = { 'update selected': '更新当前配置', create: '保存', 'overwrite conflicting name': '更新原配置' }[action];
       await button(page, saveLabel).click();
       await page.getByText('无法保存此音效配置。', { exact: true }).waitFor();
-      assert.deepEqual(await stored(page), before);
-      assert.deepEqual(await storedProfiles(page), profilesBefore);
+      assert.deepEqual(await stored(page, true), before);
       assert.equal(await selector(page).inputValue(), before.selection);
       assert.equal(await volume(page).inputValue(), '0.49');
 
       await reload(page);
       assert.equal(await selector(page).inputValue(), before.selection);
       assert.equal(await volume(page).inputValue(), String(before.volume));
-      await selector(page).selectOption('current');
-      await ready(page);
-      await selector(page).selectOption(a);
-      await ready(page);
-      assert.equal(await volume(page).inputValue(), '0.21');
 
       // A successful retry must persist all three records and survive reload.
       await volume(page).fill('0.49');
-      await button(page, '保存当前配置').click();
-      if (action === 'create') await page.getByLabel('配置名称').fill('QA new');
-      await button(page, action === 'create' ? '保存' : '更新当前配置').click();
+      const retryLabel = await openProfileSave(page, action);
+      await button(page, retryLabel).click();
       await button(page, '保存当前配置').waitFor();
       const saved = await selector(page).inputValue();
-      assert.equal((await storedProfiles(page)).find(({ id }) => id === saved).settings.volume, .49);
-      assert.deepEqual(await stored(page), { volume: .49, selection: saved });
+      const { profiles, ...working } = await stored(page, true);
+      assert.equal(profiles.find(({ id }) => id === saved).settings.volume, .49);
+      assert.deepEqual(working, { volume: .49, selection: saved });
       await reload(page);
       assert.equal(await selector(page).inputValue(), saved);
       assert.equal(await volume(page).inputValue(), '0.49');

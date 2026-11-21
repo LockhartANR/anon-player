@@ -113,7 +113,7 @@ function dropTargetAt(x: number, y: number): DropTarget | undefined {
     const { top, bottom } = row.getBoundingClientRect();
     const offset = y - (top + bottom) / 2;
     if (y >= top && y < bottom) return { id, after: offset >= 0 };
-    // The header and inline editor aren't sortable. Use the nearest sortable row.
+    // The inline editor isn't sortable. Use the nearest sortable row.
     if (Math.abs(offset) < nearest) {
       nearest = Math.abs(offset);
       closest = { id, after: offset >= 0 };
@@ -193,7 +193,8 @@ function saveConfig() {
     </form>
     <template v-else>
       <table ref="counterTable" class="counter-table">
-        <thead><tr><th scope="col">名称</th><th scope="col">结果 / 表达式</th></tr></thead>
+        <colgroup><col /><col /></colgroup>
+        <thead class="visually-hidden"><tr><th scope="col">名称</th><th scope="col">结果 / 表达式</th></tr></thead>
         <tbody>
           <template v-for="(counter, index) in rows" :key="counter.id">
             <tr v-if="draft?.id === counter.id" class="counter-edit-row">

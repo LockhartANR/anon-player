@@ -1,7 +1,6 @@
 <script setup lang="ts">
 const paths: Record<string, string> = {
   upload: 'M12 16V4 M7 9l5-5 5 5 M4 16v4h16v-4',
-  film: 'M3 5h18v14H3z M7 5v14 M17 5v14 M3 10h4 M3 14h4 M17 10h4 M17 14h4',
   close: 'M6 6l12 12 M18 6 6 18',
   link: 'M10 14l4-4 M8.5 15.5 7 17a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0 M15.5 8.5 17 7a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0',
   file: 'M6 3h8l4 4v14H6z M14 3v5h4 M9 13h6 M9 17h4',

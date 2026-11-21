@@ -31,7 +31,11 @@ function positionHandle(handle, y) {
 }
 
 test('counter actions leave room for long values on a narrow touch viewport', async (t) => {
-  const { rows } = await openCounters(t, { viewport, isMobile: true, hasTouch: true });
+  const { page, rows } = await openCounters(t, { viewport, isMobile: true, hasTouch: true });
+  assert.deepEqual(await page.getByRole('columnheader').allTextContents(), ['名称', '结果 / 表达式']);
+  const tableBox = await page.locator('.counter-table').boundingBox();
+  const rowBox = await rows.first().boundingBox();
+  assert.ok(Math.abs(rowBox.y - tableBox.y) <= 1, 'accessible headers add a visible heading row');
   const row = rows.first();
   const value = row.locator('.counter-result');
   const actions = row.locator('.counter-row-actions');

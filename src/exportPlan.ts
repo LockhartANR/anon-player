@@ -1,13 +1,12 @@
 import { selectSound, soundLevel } from './audio';
-import { Replay } from './replay';
-import type { ClickEvent } from './replay';
+import type { ClickEvent, Replay } from './replay';
 import { soundTimeline } from './soundSettings';
 import type { GroupKey, SoundSettings } from './soundSettings';
 
 export type ExportVideoSettings = { width: number; height: number; fps: number; bitrate: number };
 
 export type ExportReplay = {
-  key: number;
+  key: symbol;
   filename: string;
   bytes: ArrayBuffer;
   durationMs: number;
@@ -19,14 +18,11 @@ export type ExportReplay = {
 export type AudioCue = { start: number; buffer: AudioBuffer; gain: number };
 type ExportSegment = { replay: ExportReplay; start: number; end: number };
 
-export function describeExportReplay(key: number, filename: string, bytes: ArrayBuffer): ExportReplay {
-  const replay = Replay.open(filename, bytes);
-  try {
-    return {
-      key, filename, bytes, durationMs: replay.durationMs, playerIdentifier: replay.playerIdentifier,
-      clickEvents: replay.clickEvents, holdSeconds: 1,
-    };
-  } finally { replay.close(); }
+export function createExportReplay(replay: Replay, bytes: ArrayBuffer): ExportReplay {
+  return {
+    key: Symbol(), filename: replay.filename, bytes, durationMs: replay.durationMs,
+    playerIdentifier: replay.playerIdentifier, clickEvents: replay.clickEvents, holdSeconds: 1,
+  };
 }
 
 export function planReplayAudio(replay: ExportReplay, settings: SoundSettings, getBuffer: (id: string) => AudioBuffer | undefined): AudioCue[] {
@@ -44,7 +40,7 @@ export function planReplayAudio(replay: ExportReplay, settings: SoundSettings, g
   return cues;
 }
 
-export function planExport(replays: ExportReplay[], cuesByReplay: ReadonlyMap<number, AudioCue[]>, fps: number) {
+export function planExport(replays: ExportReplay[], cuesByReplay: ReadonlyMap<symbol, AudioCue[]>, fps: number) {
   const segments: ExportSegment[] = [];
   const cues: AudioCue[] = [];
   let position = 0;

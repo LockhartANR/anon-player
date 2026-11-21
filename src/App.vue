@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import Board from './Board.vue';
-import ExportDialog from './ExportDialog.vue';
+import ExportPanel from './ExportPanel.vue';
 import Icon from './Icon.vue';
 import SoundEditor from './SoundEditor.vue';
 import { ClickAudio } from './audio';
 import CounterEditor from './CounterEditor.vue';
 import { readCounters } from './counters';
+import { createExportReplay } from './exportPlan';
+import type { ExportReplay } from './exportPlan';
 import { fetchOpenMsReplay, parseOpenMsReplayId } from './openmsReplay';
 import { Replay } from './replay';
 import type { Frame } from './replay';
@@ -14,7 +16,11 @@ import { cloneSoundSettings, defaultSounds, readSoundProfile, readSounds, saveSo
 import type { GroupKey, SoundAsset, SoundSettings } from './soundSettings';
 
 const fileInput = ref<HTMLInputElement>();
-const exportDialog = ref<InstanceType<typeof ExportDialog>>();
+const exportPanel = ref<InstanceType<typeof ExportPanel>>();
+const exportQueue = shallowRef<ExportReplay[]>([]);
+const currentExportReplay = shallowRef<ExportReplay>();
+const currentReplayQueued = computed(() => exportQueue.value.some(({ key }) => key === currentExportReplay.value?.key));
+const canQueueCurrentReplay = computed(() => !!currentExportReplay.value && !loading.value && !exportPanel.value?.busy && !currentReplayQueued.value);
 const onlineDialog = ref<HTMLDialogElement>();
 const onlineInput = ref('');
 const onlineError = ref('');
@@ -123,6 +129,7 @@ function closeReplay() {
   stopReplayPlayback();
   replay.value?.close();
   replay.value = undefined;
+  currentExportReplay.value = undefined;
   setPosition(0);
   includeStart = true;
   fileError.value = '';
@@ -173,6 +180,7 @@ async function loadReplay(source: 'local' | 'openms', read: (signal: AbortSignal
       const first = next.frameAt(0);
       replay.value?.close();
       replay.value = next;
+      currentExportReplay.value = createExportReplay(next, bytes);
       position.value = 0;
       includeStart = true;
       frame.value = first;
@@ -210,9 +218,10 @@ function openOnlineDialog() {
   onlineDialog.value?.showModal();
 }
 
-function openExportDialog() {
-  if (playing.value) pauseClock();
-  exportDialog.value?.open();
+function queueCurrentReplay() {
+  const entry = currentExportReplay.value;
+  if (!entry || !canQueueCurrentReplay.value) return;
+  exportQueue.value = [...exportQueue.value, entry];
 }
 
 function closeOnlineDialog() {
@@ -395,7 +404,6 @@ onBeforeUnmount(() => {
     </div>
     <input ref="fileInput" type="file" accept=".evf,.avf,.mvf,.rmv" hidden aria-label="录像文件" @change="chooseFile" />
     <div class="topbar-actions">
-      <button class="button secondary" type="button" @click="openExportDialog"><Icon name="film" :size="17" /> 导出 MP4</button>
       <button class="button primary" type="button" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 导入录像</button>
       <button class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
     </div>
@@ -416,14 +424,15 @@ onBeforeUnmount(() => {
     </form>
   </dialog>
 
-  <ExportDialog ref="exportDialog" :sound="sound" :settings="settings" :sounds-ready="soundsReady" :counters="counters" />
-
   <main class="workspace">
     <section class="player" aria-label="录像播放器">
       <header class="player-heading">
         <span class="file-mark"><Icon name="file" :size="18" /></span>
         <div class="file-caption">
-          <h2 :title="replay?.filename">{{ replay?.filename ?? '录像播放器' }}</h2>
+          <div class="file-title">
+            <h2 :title="replay?.filename">{{ replay?.filename ?? '录像播放器' }}</h2>
+            <button v-if="replay" type="button" class="icon-button small" aria-label="关闭录像" title="关闭录像" @click="closeReplay"><Icon name="close" :size="16" /></button>
+          </div>
           <span v-if="replay" class="file-detail">{{ replay.format }} <span>·</span> {{ replay.columns }} × {{ replay.rows }} <span>·</span> {{ replay.completed ? '完成' : '未完成' }}</span>
         </div>
         <span class="player-state" :class="{ active: playing }">{{ loading ? '读取中' : playing ? '播放中' : replay ? (position >= duration && duration > 0 ? '播放完毕' : '已暂停') : '等待录像' }}</span>
@@ -437,7 +446,10 @@ onBeforeUnmount(() => {
         <div v-else class="empty-workbench">
           <div class="empty-icon"><Icon name="upload" :size="30" /></div>
           <h3>{{ loading ? '正在读取录像' : '拖入扫雷录像' }}</h3>
-          <button type="button" class="button secondary" :disabled="loading" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 选择本地文件</button>
+          <div class="empty-actions">
+            <button type="button" class="button secondary" :disabled="loading" @click="fileInput?.click()"><Icon name="upload" :size="17" /> 选择本地文件</button>
+            <button type="button" class="button secondary" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
+          </div>
           <div class="formats" aria-label="支持格式"><span v-for="format in ['EVF', 'AVF', 'MVF', 'RMV']" :key="format">{{ format }}</span></div>
         </div>
         <div v-if="dragDepth > 0 && frame" class="drop-overlay">松开以打开录像</div>
@@ -454,10 +466,14 @@ onBeforeUnmount(() => {
           <button type="button" class="icon-button transport-icon" :disabled="!replay || loading" aria-label="回到开头" title="回到开头" @click="restart"><Icon name="restart" /></button>
           <label class="speed-select"><select aria-label="播放倍速" :value="rate" @change="setRate(Number(($event.target as HTMLSelectElement).value))"><option v-for="speed in rates" :key="speed" :value="speed">{{ speed }}×</option></select></label>
           <button type="button" class="icon-button transport-icon" :disabled="!soundsReady" :aria-label="settings.muted ? '取消静音' : '静音'" :title="settings.muted ? '取消静音' : '静音'" :aria-pressed="settings.muted" @click="toggleMute"><Icon :name="settings.muted ? 'muted' : 'volume'" /></button>
-          <button v-if="replay" type="button" class="icon-button transport-icon close-replay" aria-label="关闭录像" title="关闭录像" @click="closeReplay"><Icon name="close" /></button>
+          <button type="button" class="button secondary queue-current" :disabled="!canQueueCurrentReplay" @click="queueCurrentReplay">
+            <Icon v-if="!currentReplayQueued" name="plus" :size="16" />{{ currentReplayQueued ? '已加入导出队列' : '加入导出队列' }}
+          </button>
         </div>
       </div>
     </section>
+
+    <ExportPanel ref="exportPanel" v-model:queue="exportQueue" :sound="sound" :settings="settings" :sounds-ready="soundsReady" :counters="counters" @start="pauseClock" />
 
     <aside class="side-panel" aria-label="数据和音效">
       <nav class="panel-tabs" aria-label="播放器面板">

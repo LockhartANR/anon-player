@@ -1,6 +1,6 @@
 # Anon Player
 
-浏览器里的扫雷录像播放器。支持本地 EVF、AVF、MVF、RMV 文件和 OpenMS 在线录像，提供统一可编辑计数器、命名音效配置与带背景音乐的 MP4 导出。录像和用户音频都在浏览器里处理。
+浏览器里的扫雷录像播放器。支持本地 EVF、AVF、MVF、RMV 文件和开源扫雷网在线录像，提供统一可编辑计数器、命名音效配置与带背景音乐的 MP4 导出。录像和用户音频都在浏览器里处理。
 
 ## 本地运行
 
@@ -11,9 +11,9 @@ npm ci
 npm run dev
 ```
 
-访问终端给出的地址。在播放区或顶栏打开本地录像、OpenMS 录像，也可直接拖入本地文件。OpenMS 支持输入 ID（如 `107`）或 [录像链接](https://openms.top/#/video/107)。文件名右侧的「关闭录像」可返回空白播放区。
+访问终端给出的地址。在播放区或顶栏打开本地录像、开源扫雷网录像，也可直接拖入本地文件。开源扫雷网支持输入 ID（如 `107`）或 [录像链接](https://openms.top/#/video/107)。文件名右侧的「关闭录像」可返回空白播放区。
 
-点击播放器右下角的「加入导出队列」，再用旁边的「打开下一个」继续导入本地文件，下拉箭头可选择 OpenMS。播放器下方的队列在关闭或更换录像后保留，刷新页面会清空。调整顺序和末帧停留时间后，点击「生成 MP4」并下载。导出需要支持 H.264 和 AAC 编码的浏览器。
+点击播放器右下角的「加入导出队列」，再用旁边的「打开下一个」继续导入本地文件，下拉箭头可选择开源扫雷网。播放器下方的队列在关闭或更换录像后保留，刷新页面会清空。调整顺序和末帧停留时间后，点击「生成 MP4」并下载。导出需要支持 H.264 和 AAC 编码的浏览器。
 
 队列下方可调整分辨率、帧率、码率和背景音乐。视频默认使用 1920×1080、60 fps、10 Mbps，可选 720p、1080p、1440p、4K 预设。宽高须为正偶数，支持的参数组合取决于浏览器的 H.264 编码能力。背景音乐支持预设和本地文件，取消或读取失败时保留上一次成功选择的音乐。
 
@@ -26,7 +26,7 @@ npm run dev
 ## 配置预设
 
 - 在 [src/counters.ts](src/counters.ts) 的 `defaultCounterRows` 修改首次打开时的计数器。每行是 `[名称, 表达式]`。已有浏览器优先读取已保存的配置。
-- 在 [src/defaultSoundProfile.ts](src/defaultSoundProfile.ts) 修改「默认配置」。把文件放进 `public/sounds/profiles/default/`，用 `{ id, name, path }` 登记，再把素材 ID 填入组的 `ids`。固定模式使用 `fixedId`，随机模式使用 `random`，顺序模式使用 `sequence`。轮播顺序与 `ids` 一致。音量取值为 0 到 1。
+- 在 [src/defaultSoundProfile.ts](src/defaultSoundProfile.ts) 修改「默认配置」。把文件放进 `public/sounds/profiles/default/`，用 `{ id, name, path }` 登记。各组通过 `createGroup(模式, [素材 ID, …])` 配置：`fixed` 固定播放首个素材，`random` 随机播放，`sequence` 按列表顺序轮播。音量取值为 0 到 1。
 - 在 [src/musicTracks.ts](src/musicTracks.ts) 按下拉框显示顺序登记 `{ id, name, path }`，曲目文件放进 `public/audio/music/`。
 
 音频条目使用唯一的 `id`，`path` 相对于对应素材目录，子目录用 `/` 分隔。默认音效读取或解码失败时回退到内置音效。

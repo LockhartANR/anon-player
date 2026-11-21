@@ -9,7 +9,7 @@ import CounterEditor from './CounterEditor.vue';
 import { readCounters } from './counters';
 import { createExportReplay } from './exportPlan';
 import type { ExportReplay } from './exportPlan';
-import { fetchOpenMsReplay, parseOpenMsReplayId } from './openmsReplay';
+import { fetchOpenMsReplay, openmsOrigin, parseOpenMsReplayId } from './openmsReplay';
 import { Replay } from './replay';
 import type { Frame } from './replay';
 import { cloneSoundSettings, defaultSounds, readSoundProfile, readSounds, saveSounds } from './soundSettings';
@@ -439,15 +439,15 @@ onBeforeUnmount(() => {
     <input ref="fileInput" type="file" accept=".evf,.avf,.mvf,.rmv" hidden aria-label="录像文件" @change="chooseFile" />
     <div class="topbar-actions">
       <button class="button primary" type="button" @click="openLocalReplay"><Icon name="upload" :size="17" /> 导入录像</button>
-      <button class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
+      <button class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开开源扫雷网录像</button>
     </div>
   </header>
 
   <dialog ref="onlineDialog" class="online-dialog" aria-labelledby="openms-dialog-title" @cancel.prevent="closeOnlineDialog">
     <form class="online-form" @submit.prevent="openOnlineReplay">
-      <h2 id="openms-dialog-title">打开 OpenMS 录像</h2>
+      <h2 id="openms-dialog-title">打开<a :href="openmsOrigin" target="_blank" rel="noopener noreferrer">开源扫雷网</a>录像</h2>
       <label for="openms-replay-input">录像 ID 或链接</label>
-      <input id="openms-replay-input" v-model="onlineInput" type="text" placeholder="107 或 https://openms.top/#/video/107"
+      <input id="openms-replay-input" v-model="onlineInput" type="text" :placeholder="`107 或 ${openmsOrigin}/#/video/107`"
         autofocus autocomplete="off" :readonly="onlineLoading" :aria-invalid="!!onlineError" @input="onlineError = ''" />
       <p v-if="onlineError" class="error-message" role="alert">{{ onlineError }}</p>
       <p v-if="onlineLoading" class="muted-text" role="status">正在读取录像…</p>
@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
           <h3>{{ loading ? '正在读取录像' : '拖入扫雷录像' }}</h3>
           <div class="empty-actions">
             <button type="button" class="button secondary" :disabled="loading" @click="openLocalReplay"><Icon name="upload" :size="17" /> 选择本地文件</button>
-            <button type="button" class="button secondary" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开 OpenMS 录像</button>
+            <button type="button" class="button secondary" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开开源扫雷网录像</button>
           </div>
           <div class="formats" aria-label="支持格式"><span v-for="format in ['EVF', 'AVF', 'MVF', 'RMV']" :key="format">{{ format }}</span></div>
         </div>
@@ -511,7 +511,7 @@ onBeforeUnmount(() => {
                 <Icon name="down" :size="15" />
               </button>
               <div v-if="replaySourcesOpen" id="replay-source-options" class="replay-source-options" role="group" aria-label="录像来源">
-                <button type="button" class="button" @click="openOnlineDialog"><Icon name="link" :size="17" />打开 OpenMS 录像</button>
+                <button type="button" class="button" @click="openOnlineDialog"><Icon name="link" :size="17" />打开开源扫雷网录像</button>
               </div>
             </div>
             <button type="button" class="button secondary queue-current" :disabled="!canQueueCurrentReplay" @click="queueCurrentReplay">
@@ -539,4 +539,12 @@ onBeforeUnmount(() => {
         @change="changeSounds" @switch-profile="invalidateSoundImports" @import="importSounds" @preview="previewSound" @mix="changeMix" @save-mix="persistSound(settings)" />
     </aside>
   </main>
+
+  <footer class="site-footer">
+    <nav aria-label="友链与项目链接">
+      <a :href="openmsOrigin" target="_blank" rel="noopener noreferrer" title="友情链接：开源扫雷网"><Icon name="link" :size="15" />开源扫雷网</a>
+      <span class="footer-divider" aria-hidden="true"></span>
+      <a href="https://github.com/LockhartANR/anon-player" target="_blank" rel="noopener noreferrer" aria-label="GitHub 仓库"><Icon name="code" :size="16" />GitHub</a>
+    </nav>
+  </footer>
 </template>

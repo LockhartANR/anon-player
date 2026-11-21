@@ -1,19 +1,17 @@
 import { defaultSounds } from './soundSettings';
-import type { SoundSettings } from './soundSettings';
+import type { SoundGroup, SoundMode, SoundSettings } from './soundSettings';
 
 const DEFAULT_SOUND_RESOURCE_DIRECTORY = 'sounds/profiles/default';
 
-export type DefaultSoundResource = { id: string; name: string; path: string };
+type DefaultSoundResource = { id: string; name: string; path: string };
 
-/**
- * Project-owned resource manifest. Populate this list when default audio files
- * are provided; paths are relative to public/sounds/profiles/default/.
- */
-export const DEFAULT_SOUND_RESOURCES: readonly DefaultSoundResource[] = [
-  { id: 'bingbingbing', name: '冰冰冰', path: '冰冰冰.mp3' },
-  { id: 'ng', name: '嗯', path: '嗯.mp3' },
-  { id: 'angry', name: '怒', path: '怒.mp3' },
-  { id: 'fart', name: '屁', path: '屁.mp3' },
+// Paths are relative to public/sounds/profiles/default/.
+const DEFAULT_SOUND_RESOURCES: readonly DefaultSoundResource[] = [
+  { id: 'bing', name: '冰', path: '冰.wav' },
+  { id: 'ng', name: '嗯？', path: '嗯？.wav' },
+  { id: 'angry', name: '怒', path: '怒.wav' },
+  { id: 'fart', name: '屁', path: '屁.wav' },
+  { id: 'sigh', name: '叹气', path: '叹气.wav' },
   { id: 'nailong1', name: '奶龙1', path: '奶龙1.mp3' },
   { id: 'nailong2', name: '奶龙2', path: '奶龙2.mp3' },
   { id: 'nailong3', name: '奶龙3', path: '奶龙3.mp3' },
@@ -24,44 +22,18 @@ export const DEFAULT_SOUND_RESOURCES: readonly DefaultSoundResource[] = [
   { id: 'anon', name: '爱音唐哭', path: '爱音.wav' }
 ];
 
-/**
- * Apply the project sound profile on top of the built-in group settings.
- */
+function createGroup(mode: SoundMode, ids: string[]): SoundGroup {
+  return { mode, ids, fixedId: mode === 'fixed' ? ids[0] ?? '' : '', volume: 1, clipVolumes: {} };
+}
+
 export async function loadDefaultSoundProfile(): Promise<SoundSettings> {
   const settings = defaultSounds();
   settings.volume = 0.65;
 
-  settings.groups.left = {
-    mode: 'fixed',
-    ids: ['bingbingbing'],
-    fixedId: 'bingbingbing',
-    volume: 1,
-    clipVolumes: {},
-  };
-
-  settings.groups.right = {
-    mode: 'random',
-    ids: ['ng', 'angry', 'fart'],
-    fixedId: '',
-    volume: 1,
-    clipVolumes: {},
-  };
-
-  settings.groups.double = {
-    mode: 'sequence',
-    ids: ['nailong1', 'nailong2', 'nailong3', 'nailong4', 'nailong5'],
-    fixedId: '',
-    volume: 1,
-    clipVolumes: {},
-  };
-
-  settings.groups.end = {
-    mode: 'random',
-    ids: ['kskbl', 'wow', 'anon'],
-    fixedId: '',
-    volume: 1,
-    clipVolumes: {},
-  };
+  settings.groups.left = createGroup('fixed', ['bing']);
+  settings.groups.right = createGroup('random', ['ng', 'angry', 'fart', 'sigh']);
+  settings.groups.double = createGroup('sequence', ['nailong1', 'nailong2', 'nailong3', 'nailong4', 'nailong5']);
+  settings.groups.end = createGroup('random', ['kskbl', 'wow', 'anon']);
 
   const baseUrl = import.meta.env.BASE_URL;
   for (const resource of DEFAULT_SOUND_RESOURCES) {

@@ -28,6 +28,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 button, select, input { color: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 h1, h2, h3, p, dl, dd { margin: 0; }
+.online-form a { color: var(--accent); text-underline-offset: .2em; }
+.online-form a:hover { color: var(--accent-strong); }
 svg { flex: none; vertical-align: middle; }
 
 .topbar {
@@ -45,6 +47,11 @@ svg { flex: none; vertical-align: middle; }
 .brand { display: flex; gap: .6rem; align-items: center; }
 .brand h1 { font-size: 1.14rem; font-weight: 700; }
 .brand-mark { flex: none; object-fit: contain; }
+.site-footer { padding: 0 .75rem 1rem; }
+.site-footer nav { display: flex; justify-content: center; align-items: center; gap: .65rem; }
+.site-footer a { display: inline-flex; align-items: center; gap: .4rem; min-height: 36px; padding: .35rem .5rem; border-radius: 4px; color: var(--muted); font-size: .82rem; text-decoration: none; }
+.site-footer a:hover, .site-footer a:focus-visible { color: var(--accent-strong); background: var(--accent-tint); }
+.footer-divider { width: 1px; height: 12px; background: var(--line); }
 .file-mark { display: grid; place-items: center; border-radius: 4px; width: 32px; height: 32px; flex: none; color: var(--muted); background: var(--inset); border: 1px solid var(--line); }
 .button, .icon-button {
   display: inline-flex;

@@ -4,6 +4,8 @@
 
 ## 本地运行
 
+使用 Node.js 24。项目运行在浏览器中，无需后端服务。
+
 ```sh
 npm ci
 npm run dev
@@ -42,3 +44,18 @@ npm run preview
 `build` 先做 Vue 和 TypeScript 类型检查，再输出 `dist/`。`preview` 用来检查构建结果。将 `dist/` 的全部内容交给静态服务器，通过 HTTPS 提供服务。构建采用相对资源路径，支持域名根目录和以 `/` 结尾的子路径。服务器应为 WASM 返回 `application/wasm`，并随构建产物保留第三方许可文件。
 
 实现细节见 [开发文档](开发文档.md)，操作触发和回放验收见 [扫雷鼠标操作规范](扫雷鼠标操作规范.md)。
+
+## 浏览器回归
+
+安装测试用的 Chromium，然后启动构建预览：
+
+```sh
+npx playwright install chromium
+npm run preview -- --host 127.0.0.1 --port 4190 --strictPort
+```
+
+在另一终端运行 `npm run test:browser`。测试覆盖音效配置的保存、切换和事务回滚。
+
+## 许可
+
+项目自有源码和文档采用 [MIT 许可](LICENSE)。预设背景音乐、默认音效和站点图标随站点源码提供，复用这些素材请遵循各自的权利条款。第三方依赖适用各自的许可，构建产物的 `licenses/` 保留相应声明。

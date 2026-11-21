@@ -1,11 +1,7 @@
-// Run against npm run preview with Playwright Core and a Chromium executable:
-// ANON_PLAYER_PLAYWRIGHT=<module path> ANON_PLAYER_CHROMIUM=<executable> node tests/browser/sound-profiles.mjs
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { after, test } from 'node:test';
+import { chromium } from 'playwright';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.ANON_PLAYER_PLAYWRIGHT || 'playwright-core');
 const browser = await chromium.launch({ executablePath: process.env.ANON_PLAYER_CHROMIUM, headless: true });
 const url = process.env.ANON_PLAYER_URL || 'http://127.0.0.1:4190/';
 after(() => browser.close());

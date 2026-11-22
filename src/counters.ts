@@ -19,7 +19,7 @@ export const defaultCounterRows: readonly (readonly [string, string])[] = [
   ['est time', 'roundTo(etime, 3)'],
   ['3bv', 'bbbv_solved || "/" || bbbv'],
   ['bvs', 'roundTo(bbbv_s, 3)'],
-  ['stnb', 'roundTo(stnb * (bbbv_solved / bbbv) ** 0.7, 3) || "/" || roundTo(stnb * (bbbv_solved / bbbv) ** 0.2, 3)'],
+  ['stnb', 'roundTo(stnb, 3)'],
   ['opis', 'op || "op " || isl || "is"'],
   ['left', 'left || "@" || roundTo(left_s, 3)'],
   ['right', 'right || "@" || roundTo(right_s, 3)'],

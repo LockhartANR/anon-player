@@ -74,7 +74,7 @@ svg { flex: none; vertical-align: middle; }
 .icon-button { width: 36px; padding: 0; color: var(--muted); }
 .icon-button:hover:not(:disabled) { background: var(--accent-tint); color: var(--accent-strong); }
 .icon-button.small { width: 29px; min-height: 29px; }
-.icon-button:disabled, .button:disabled, .file-button.disabled { opacity: .4; }
+.icon-button:disabled, .icon-button[aria-disabled='true'], .button:disabled, .file-button.disabled { opacity: .4; }
 
 .workspace {
   max-width: 1448px;
@@ -168,7 +168,7 @@ select { height: 36px; min-width: 0; background: var(--surface); border: 1px sol
 select { appearance: none; padding-right: 1.85rem; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 14px) 50%, calc(100% - 10px) 50%; background-size: 4px 4px; background-repeat: no-repeat; }
 .speed-select select { font: .87rem var(--mono); }
 
-.online-dialog {
+.online-dialog, .sound-preset-dialog {
   width: min(440px, calc(100% - 2rem));
   padding: 0;
   border: 1px solid var(--line);
@@ -177,7 +177,7 @@ select { appearance: none; padding-right: 1.85rem; background-image: linear-grad
   color: inherit;
   box-shadow: 0 12px 40px #152b4733;
 }
-.online-dialog::backdrop { background: #1e2c4360; }
+.online-dialog::backdrop, .sound-preset-dialog::backdrop { background: #1e2c4360; }
 .online-form { display: grid; gap: .65rem; padding: 1rem; }
 .online-form h2 { font-size: 1.1rem; }
 .online-form label { color: var(--muted); font-size: .9rem; }
@@ -297,6 +297,17 @@ select { appearance: none; padding-right: 1.85rem; background-image: linear-grad
 .sound-editor .field-label { display: block; margin: .8rem 0 .38rem; }
 .sound-editor select { width: 100%; font-size: .9rem; }
 .sound-editor .muted-text { margin-top: .75rem; }
+.sound-import-actions, .sound-import-status { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .65rem; }
+.sound-import-actions .file-button { margin-top: 0; }
+.sound-import-status .muted-text { margin: 0; }
+.sound-preset-picker { display: grid; gap: .55rem; padding: 1rem; }
+.sound-preset-picker h2 { font-size: 1.1rem; }
+.sound-preset-picker .muted-text, .sound-preset-picker .error-message { margin: 0; }
+.sound-preset-list { max-height: 48vh; overflow-y: auto; margin: 0; padding: .2rem; list-style: none; }
+.sound-preset-list li { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .3rem .15rem; border-bottom: 1px solid var(--line); }
+.sound-preset-list .checkbox-line { flex: 1; min-height: 32px; margin: 0; color: inherit; }
+.sound-preset-added { color: var(--muted); }
+.sound-preset-picker .form-actions { flex-wrap: wrap; }
 .checkbox-line { display: flex; gap: .4rem; align-items: center; font-size: .87rem; margin-top: .65rem; color: var(--muted); }
 .checkbox-line input { accent-color: var(--accent); }
 .file-button { cursor: pointer; position: relative; margin-top: .45rem; }

@@ -14,6 +14,8 @@ import { Replay } from './replay';
 import type { Frame } from './replay';
 import { cloneSoundSettings, defaultSounds, readSoundProfile, readSounds, saveSounds } from './soundSettings';
 import type { GroupKey, SoundAsset, SoundSettings } from './soundSettings';
+import { loadSoundPreset } from './soundPresets';
+import type { SoundPreset } from './soundPresets';
 
 const fileInput = ref<HTMLInputElement>();
 const replayOpener = ref<HTMLDivElement>();
@@ -44,6 +46,7 @@ const seeking = ref(false);
 const tab = ref<'stats' | 'audio'>('stats');
 const settings = shallowRef(defaultSounds());
 const soundsReady = ref(false);
+const soundImport = shallowRef<AbortController>();
 const badAssets = shallowRef(new Set<string>());
 const sound = new ClickAudio();
 const rates = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
@@ -305,7 +308,15 @@ function changeSounds(next: SoundSettings, persist = true) {
   if (persist) persistSound(next);
 }
 
-function invalidateSoundImports() { soundProfileRevision++; }
+function cancelSoundImport() {
+  soundImport.value?.abort();
+  soundImport.value = undefined;
+}
+
+function invalidateSoundImports() {
+  soundProfileRevision++;
+  cancelSoundImport();
+}
 
 async function switchSoundProfile(next: SoundSettings, id: string) {
   await applySoundProfile(next, { profileId: id });
@@ -365,29 +376,62 @@ function makeId() {
   return Array.from(crypto.getRandomValues(new Uint32Array(3)), (part) => part.toString(36)).join('-');
 }
 
-async function importSounds(groupKey: GroupKey, files: File[]) {
-  if (!soundsReady.value) return;
-  const revision = soundProfileRevision;
+async function importSounds(groupKey: GroupKey, sources: (File | SoundPreset)[]) {
+  if (!soundsReady.value || soundImport.value) return;
+  const controller = new AbortController();
+  const { signal } = controller;
+  soundImport.value = controller;
   audioError.value = '';
-  const imported: { asset: SoundAsset; buffer: AudioBuffer }[] = [];
-  const failed: string[] = [];
-  for (const file of files) {
-    const asset = { id: makeId(), name: file.name, file };
-    try { imported.push({ asset, buffer: await sound.decodeFile(file) }); }
-    catch { failed.push(file.name); }
-    if (disposed || revision !== soundProfileRevision) return;
+  try {
+    const imported: { asset: SoundAsset; buffer: AudioBuffer }[] = [];
+    const failed: (File | SoundPreset)[] = [];
+    for (const source of sources) {
+      try {
+        const local = source instanceof File;
+        const existing = local ? undefined : settings.value.assets.find(({ id }) => id === source.id);
+        const cached = existing && sound.buffer(existing.id);
+        const asset = local ? { id: makeId(), name: source.name, file: source }
+          : existing && cached ? existing : await loadSoundPreset(source, signal);
+        if (signal.aborted) return;
+        imported.push({ asset, buffer: cached ?? await sound.decodeFile(asset.file) });
+      } catch {
+        failed.push(source);
+      }
+      if (signal.aborted) return;
+    }
+    if (failed.length) audioError.value = `无法导入 ${failed.map(({ name }) => name).join('、')}`;
+
+    if (imported.length) {
+      const next = cloneSoundSettings(settings.value);
+      const group = next.groups[groupKey];
+      const broken = new Set(badAssets.value);
+      for (const { asset, buffer } of imported) {
+        const index = next.assets.findIndex(({ id }) => id === asset.id);
+        if (index < 0) next.assets.push(asset);
+        else next.assets[index] = asset;
+        sound.rememberDecoded(asset.id, buffer);
+        broken.delete(asset.id);
+        if (!group.ids.includes(asset.id)) group.ids.push(asset.id);
+      }
+      if (!group.fixedId) group.fixedId = group.ids[0];
+      badAssets.value = broken;
+      changeSounds(next);
+    }
+    return failed.flatMap((source) => source instanceof File ? [] : [source.id]);
+  } finally {
+    if (soundImport.value === controller) soundImport.value = undefined;
   }
-  if (failed.length) audioError.value = `无法解码 ${failed.join('、')}`;
-  if (!imported.length) return;
-  const next = cloneSoundSettings(settings.value);
-  const group = next.groups[groupKey];
-  for (const { asset, buffer } of imported) {
-    sound.rememberDecoded(asset.id, buffer);
-    next.assets.push(asset);
-    group.ids.push(asset.id);
-  }
-  if (!group.fixedId) group.fixedId = group.ids[0];
-  changeSounds(next);
+}
+
+function previewPresetSound(group: GroupKey, preset: SoundPreset, signal: AbortSignal) {
+  return sound.preview(group, preset.id, {
+    signal,
+    loadBuffer: async () => {
+      const asset = await loadSoundPreset(preset, signal);
+      signal.throwIfAborted();
+      return sound.decodeFile(asset.file);
+    },
+  });
 }
 
 async function previewSound(group: GroupKey, id: string) {
@@ -419,6 +463,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   disposed = true;
   activeLoad?.abort();
+  cancelSoundImport();
   audioLoadId++;
   cancelAnimationFrame(animation);
   window.removeEventListener('pointerup', endSeek);
@@ -536,7 +581,9 @@ onBeforeUnmount(() => {
       </div>
 
       <SoundEditor v-show="tab === 'audio'" :settings="settings" :ready="soundsReady" :bad-assets="badAssets" :error="audioError" :apply-profile="switchSoundProfile"
-        @change="changeSounds" @switch-profile="invalidateSoundImports" @import="importSounds" @preview="previewSound" @mix="changeMix" @save-mix="persistSound(settings)" />
+        :importing="!!soundImport" :import-sounds="importSounds" :preview-preset="previewPresetSound"
+        @change="changeSounds" @switch-profile="invalidateSoundImports" @cancel-import="cancelSoundImport"
+        @preview="previewSound" @mix="changeMix" @save-mix="persistSound(settings)" />
     </aside>
   </main>
 

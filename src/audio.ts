@@ -123,14 +123,21 @@ export class ClickAudio {
     return soundLevel(this.settings?.groups[group], id);
   }
 
-  async preview(group: GroupKey, id: string) {
-    const buffer = this.buffer(id);
-    if (!buffer) throw new Error('此音效无法播放。');
+  async preview(group: GroupKey, id: string, { signal, loadBuffer }: {
+    signal?: AbortSignal; loadBuffer?: () => Promise<AudioBuffer>;
+  } = {}) {
     await this.unlock();
+    signal?.throwIfAborted();
+    const buffer = this.buffer(id) ?? await loadBuffer?.();
+    signal?.throwIfAborted();
+    if (!buffer) throw new Error('此音效无法播放。');
     this.audition?.source.stop();
     const voice = this.makeVoice(group, id, buffer);
     this.audition = voice;
+    const stop = () => voice.source.stop();
+    signal?.addEventListener('abort', stop, { once: true });
     voice.source.onended = () => {
+      signal?.removeEventListener('abort', stop);
       if (this.audition === voice) this.audition = undefined;
       this.disconnect(voice);
     };

@@ -21,12 +21,12 @@ npm run dev
 
 表达式支持数字、字符串、字段、括号及 `+`、`-`、`*`、`/`、`%`、`**`。用 `||` 拼接文本，用 `roundTo(value, digits)` 保留 0–6 位小数，例如 `roundTo(100 * bbbv_solved / bbbv, 2) || "%"`。
 
-「音效」面板可试听、导入和编排素材，并分别调整总音量、组音量和单条音量。录像自然播完时播放结束提示音。整套设置和本地音频可命名保存，同名保存会更新配置，新名称会另存。「恢复默认音效」会把当前工作设置换成项目预设，已命名的配置可继续使用。
+在「音效」面板选定分组后，可试听并多选预设，或批量导入本地文件。「重试预设导入」会恢复原分组和待导入的预设。素材可排序，总音量、组音量和单条音量可分别调整，录像自然播完时播放结束提示音。音效及设置可命名保存。「恢复默认音效」会将当前工作设置换成项目预设，已命名的配置可继续使用。
 
 ## 配置预设
 
 - 在 [src/counters.ts](src/counters.ts) 的 `defaultCounterRows` 修改首次打开时的计数器。每行是 `[名称, 表达式]`。已有浏览器优先读取已保存的配置。
-- 在 [src/defaultSoundProfile.ts](src/defaultSoundProfile.ts) 修改「默认配置」。把文件放进 `public/sounds/profiles/default/`，用 `{ id, name, path }` 登记。各组通过 `createGroup(模式, [素材 ID, …])` 配置：`fixed` 固定播放首个素材，`random` 随机播放，`sequence` 按列表顺序轮播。音量取值为 0 到 1。
+- 将预设音效放进 `public/sounds/profiles/default/`，在 [src/soundPresets.ts](src/soundPresets.ts) 用 `{ id, name, path }` 登记。在 [src/defaultSoundProfile.ts](src/defaultSoundProfile.ts) 为默认配置选择各组素材及播放方式。`fixed` 固定播放首个素材，`random` 随机播放，`sequence` 按列表顺序轮播。音量取值为 0 到 1。
 - 在 [src/musicTracks.ts](src/musicTracks.ts) 按下拉框显示顺序登记 `{ id, name, path }`，曲目文件放进 `public/audio/music/`。
 
 音频条目使用唯一的 `id`，`path` 相对于对应素材目录，子目录用 `/` 分隔。默认音效读取或解码失败时回退到内置音效。

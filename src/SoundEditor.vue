@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import Icon from './Icon.vue';
 import VolumeSlider from './VolumeSlider.vue';
 import { cloneSoundSettings, listSoundProfiles, modes, readSoundProfile, readSoundProfileSelection, resultKey, saveSoundProfile, saveSounds, SoundProfileNameConflict, soundCategories, soundLabels, soundName, soundStorageBlockedMessage, soundStorageUpgradeBlocked } from './soundSettings';
 import type { GroupKey, ResultGroup, SoundCategory, SoundMode, SoundProfileInfo, SoundSettings } from './soundSettings';
+import { soundPresets } from './soundPresets';
+import type { SoundPreset } from './soundPresets';
+
+type PresetTarget = { key: GroupKey; label: string };
+type PresetSelection = { target: PresetTarget; ids: string[] };
 
 const props = defineProps<{
-  settings: SoundSettings; ready: boolean; badAssets: Set<string>; error: string;
+  settings: SoundSettings; ready: boolean; badAssets: Set<string>; error: string; importing: boolean;
   applyProfile: (settings: SoundSettings, id: string) => Promise<void>;
+  importSounds: (group: GroupKey, sources: (File | SoundPreset)[]) => Promise<string[] | undefined>;
+  previewPreset: (group: GroupKey, preset: SoundPreset, signal: AbortSignal) => Promise<void>;
 }>();
 const emit = defineEmits<{
   change: [settings: SoundSettings]; switchProfile: [];
-  import: [group: GroupKey, files: File[]]; preview: [group: GroupKey, id: string];
+  preview: [group: GroupKey, id: string];
+  cancelImport: [];
   mix: [settings: SoundSettings]; saveMix: [];
 }>();
 const kind = ref<SoundCategory>('left');
@@ -24,7 +32,16 @@ const savingProfile = ref(false);
 const profileName = ref('');
 const profileError = ref('');
 const nameConflict = ref<SoundProfileNameConflict>();
+const presetDialog = ref<HTMLDialogElement>();
+const presetTarget = ref<PresetTarget>();
+const selectedPresets = ref<string[]>([]);
+const presetRetries = reactive(new Map<GroupKey, PresetSelection>());
+let pendingPresets: PresetSelection | undefined;
+const previewPending = ref<string>();
+const presetError = ref('');
+let presetPreview: AbortController | undefined;
 const editorDisabled = computed(() => !props.ready || profileBusy.value);
+const importDisabled = computed(() => editorDisabled.value || props.importing);
 const groupKey = computed<GroupKey>(() => kind.value === 'end' || outcome.value === 'default'
   ? kind.value : resultKey(kind.value, outcome.value === 'changed'));
 const group = computed(() => props.settings.groups[groupKey.value]);
@@ -32,6 +49,7 @@ const inherited = computed(() => kind.value !== 'end' && outcome.value !== 'defa
 const availableModes = computed(() => kind.value === 'end' ? modes.filter(({ key }) => key !== 'sequence') : modes);
 const selectedProfile = computed(() => profiles.value.find(({ id }) => id === selectedProfileId.value));
 const updatingSelected = computed(() => selectedProfile.value?.name.trim() === profileName.value.trim());
+const targetIds = computed(() => presetTarget.value ? props.settings.groups[presetTarget.value.key].ids : []);
 
 function update(edit: (settings: SoundSettings) => void) {
   const settings = cloneSoundSettings(props.settings);
@@ -81,7 +99,82 @@ function importFiles(event: Event) {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
   input.value = '';
-  if (files.length) emit('import', groupKey.value, files);
+  if (files.length && !importDisabled.value) return props.importSounds(groupKey.value, files);
+}
+
+function openPresetPicker() {
+  const result = kind.value === 'end' || outcome.value === 'default' ? ''
+    : outcome.value === 'changed' ? '（改变局面）' : '（未改变局面）';
+  showPresetPicker({ key: groupKey.value, label: `${soundLabels[kind.value]}音效${result}` });
+}
+
+function showPresetPicker(target: PresetTarget, ids: string[] = []) {
+  if (importDisabled.value) return;
+  presetTarget.value = target;
+  selectedPresets.value = [...ids];
+  presetError.value = '';
+  presetDialog.value?.showModal();
+}
+
+function stopPresetPreview() {
+  presetPreview?.abort();
+  presetPreview = undefined;
+  previewPending.value = undefined;
+}
+
+function closePresetPicker() {
+  stopPresetPreview();
+  presetDialog.value?.close();
+}
+
+async function auditionPreset(preset: SoundPreset) {
+  const target = presetTarget.value;
+  if (!target || previewPending.value === preset.id) return;
+  stopPresetPreview();
+  const controller = new AbortController();
+  presetPreview = controller;
+  previewPending.value = preset.id;
+  presetError.value = '';
+  try {
+    await props.previewPreset(target.key, preset, controller.signal);
+  } catch {
+    if (!controller.signal.aborted) presetError.value = `无法试听「${preset.name}」。`;
+  } finally {
+    if (presetPreview === controller) previewPending.value = undefined;
+  }
+}
+
+async function addPresets() {
+  const target = presetTarget.value;
+  if (!target || importDisabled.value) return;
+  const presets = soundPresets.filter(({ id }) => selectedPresets.value.includes(id) && !targetIds.value.includes(id));
+  if (!presets.length) return;
+  const selection = { target, ids: presets.map(({ id }) => id) };
+  pendingPresets = selection;
+  closePresetPicker();
+  const failedIds = await props.importSounds(target.key, presets);
+  if (pendingPresets !== selection) return;
+  pendingPresets = undefined;
+  if (failedIds) updatePresetRetries(selection, failedIds);
+}
+
+function updatePresetRetries(selection: PresetSelection, remainingIds: string[]) {
+  const { target } = selection;
+  const previous = presetRetries.get(target.key);
+  const untouchedIds = previous?.ids.filter((id) => !selection.ids.includes(id)) ?? [];
+  const ids = [...untouchedIds, ...remainingIds];
+  if (ids.length) presetRetries.set(target.key, { target, ids });
+  else presetRetries.delete(target.key);
+}
+
+function preserveCancelledPresetSelection() {
+  if (pendingPresets) updatePresetRetries(pendingPresets, pendingPresets.ids);
+  pendingPresets = undefined;
+}
+
+function cancelImport() {
+  preserveCancelledPresetSelection();
+  emit('cancelImport');
 }
 
 async function refreshProfiles() {
@@ -115,13 +208,17 @@ async function selectProfile(event: Event) {
 }
 
 async function applySelectedProfile(id: string, fallbackMessage = '无法应用并保存所选音效配置。') {
+  preserveCancelledPresetSelection();
   emit('switchProfile');
   profileBusy.value = true;
   try {
     // Read a detached snapshot first. Do not mutate the currently applied settings
     // until the parent has decoded its assets and accepts the profile.
     if (id === 'current') await saveSounds(props.settings, id);
-    else await props.applyProfile(await readSoundProfile(id), id);
+    else {
+      await props.applyProfile(await readSoundProfile(id), id);
+      presetRetries.clear();
+    }
     selectedProfileId.value = id;
   } catch (error) {
     profileError.value = error instanceof Error ? error.message : fallbackMessage;
@@ -157,7 +254,7 @@ function onProfileNameInput() {
 }
 
 async function saveCurrentProfile(overwriteId?: string) {
-  if (editorDisabled.value || !profileName.value.trim() || (nameConflict.value && !overwriteId)) return;
+  if (importDisabled.value || !profileName.value.trim() || (nameConflict.value && !overwriteId)) return;
   profileError.value = '';
   profileBusy.value = true;
   try {
@@ -176,6 +273,7 @@ async function saveCurrentProfile(overwriteId?: string) {
 }
 
 onMounted(() => { void refreshProfiles(); });
+onBeforeUnmount(stopPresetPreview);
 </script>
 
 <template>
@@ -197,11 +295,11 @@ onMounted(() => { void refreshProfiles(); });
           :disabled="editorDisabled" @input="onProfileNameInput" @keydown.enter.prevent="saveCurrentProfile()" />
         <div class="form-actions">
           <button class="button secondary" type="button" :disabled="editorDisabled" @click="closeSaveForm">取消</button>
-          <button v-if="nameConflict" class="button primary" type="button" :disabled="editorDisabled" @click="saveCurrentProfile(nameConflict.profileId)">更新原配置</button>
-          <button v-else class="button primary" type="button" :disabled="editorDisabled || !profileName.trim()" @click="saveCurrentProfile()">{{ updatingSelected ? '更新当前配置' : '保存' }}</button>
+          <button v-if="nameConflict" class="button primary" type="button" :disabled="importDisabled" @click="saveCurrentProfile(nameConflict.profileId)">更新原配置</button>
+          <button v-else class="button primary" type="button" :disabled="importDisabled || !profileName.trim()" @click="saveCurrentProfile()">{{ updatingSelected ? '更新当前配置' : '保存' }}</button>
         </div>
       </template>
-      <button v-else class="button secondary" type="button" :disabled="editorDisabled" @click="openSaveForm">保存当前配置</button>
+      <button v-else class="button secondary" type="button" :disabled="importDisabled" @click="openSaveForm">保存当前配置</button>
       <p v-if="soundStorageUpgradeBlocked" class="error-message" role="status">{{ soundStorageBlockedMessage }}</p>
       <p v-else-if="profilesLoading" class="muted-text" role="status">正在读取配置列表…</p>
       <p v-if="profileError" class="error-message" role="status">{{ profileError }}</p>
@@ -248,8 +346,45 @@ onMounted(() => { void refreshProfiles(); });
         </li>
       </ul>
       <p v-else class="muted-text">这组还没有音效。</p>
-      <label class="button secondary file-button" :class="{ disabled: editorDisabled }"><Icon name="plus" :size="16" /> 导入音频<input type="file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" multiple :disabled="editorDisabled" @change="importFiles" /></label>
+      <div class="sound-import-actions">
+        <button class="button secondary" type="button" aria-haspopup="dialog" :disabled="importDisabled" @click="openPresetPicker"><Icon name="plus" :size="16" /> 从预设选取</button>
+        <label class="button secondary file-button" :class="{ disabled: importDisabled }"><Icon name="upload" :size="16" /> 选择本地文件<input type="file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" multiple :disabled="importDisabled" @change="importFiles" /></label>
+      </div>
     </template>
+    <div v-if="importing" class="sound-import-status">
+      <span class="muted-text" role="status">正在导入音效…</span>
+      <button class="text-button sound-reset" type="button" @click="cancelImport">取消导入</button>
+    </div>
     <p v-if="error" class="error-message" role="status">{{ error }}</p>
+    <template v-if="!importing">
+      <div v-for="retry in presetRetries.values()" :key="retry.target.key" class="sound-import-status" role="group" :aria-label="retry.target.label">
+        <button class="button secondary" type="button" aria-haspopup="dialog" :disabled="editorDisabled"
+          @click="showPresetPicker(retry.target, retry.ids)">重试预设导入</button>
+        <span class="muted-text">{{ retry.target.label }} · {{ retry.ids.length }} 条待导入</span>
+      </div>
+    </template>
+
+    <dialog ref="presetDialog" class="sound-preset-dialog" aria-labelledby="sound-preset-title" @cancel.prevent="closePresetPicker">
+      <form class="sound-preset-picker" @submit.prevent="addPresets">
+        <h2 id="sound-preset-title">选择预设音效</h2>
+        <ul class="sound-preset-list">
+          <li v-for="preset in soundPresets" :key="preset.id">
+            <label class="checkbox-line">
+              <input v-model="selectedPresets" type="checkbox" :value="preset.id" :disabled="targetIds.includes(preset.id)" />
+              {{ preset.name }}
+              <small v-if="targetIds.includes(preset.id)" class="sound-preset-added">已添加</small>
+            </label>
+            <button class="icon-button small" type="button" :aria-label="`试听预设 ${preset.name}`"
+              :aria-disabled="previewPending === preset.id || undefined" @click="auditionPreset(preset)"><Icon name="play" :size="14" /></button>
+          </li>
+        </ul>
+        <p v-if="previewPending" class="muted-text" role="status">正在加载试听…</p>
+        <p v-if="presetError" class="error-message" role="alert">{{ presetError }}</p>
+        <div class="form-actions">
+          <button class="button secondary" type="button" @click="closePresetPicker">取消</button>
+          <button class="button primary" type="submit" :disabled="!selectedPresets.length || importDisabled">添加到{{ presetTarget?.label }}</button>
+        </div>
+      </form>
+    </dialog>
   </section>
 </template>

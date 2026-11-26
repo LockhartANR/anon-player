@@ -22,8 +22,11 @@ async function openPlayer(t, viewport = { width: 1280, height: 900 }) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }, ms);
-  const remaining = (count) => page.locator('.training-readout').getByLabel(`剩余 ${count}`, { exact: true }).waitFor();
-  return { page, load, seek, remaining };
+  const counterValue = (name, expected) => page.locator('.counter-table tr[data-counter-id]')
+    .filter({ has: page.locator('.counter-name').and(page.getByText(name, { exact: true })) })
+    .locator('.counter-result').and(page.getByText(String(expected), { exact: true })).waitFor();
+  const remaining = (count) => counterValue('剩余', count);
+  return { page, load, seek, remaining, counterValue };
 }
 
 test('JSON left training renders native layers, seeks and plays at the selected rate', async (t) => {
@@ -91,7 +94,7 @@ test('malformed files and superseded metadata imports keep the last valid replay
 });
 
 test('training counters persist separately, and the board fits a narrow viewport', async (t) => {
-  const { page, load, remaining } = await openPlayer(t, { width: 360, height: 780 });
+  const { page, load, remaining, counterValue } = await openPlayer(t, { width: 360, height: 780 });
   await load('left.json', leftFixture()); await remaining(31);
   await page.getByLabel('开发者模式', { exact: true }).check();
   await page.getByLabel('计数器完整配置', { exact: true }).fill(JSON.stringify([['训练进度', 'solved || "/" || total']]));
@@ -100,7 +103,8 @@ test('training counters persist separately, and the board fits a narrow viewport
   await page.getByRole('button', { name: '关闭录像', exact: true }).click();
   assert.equal(await page.locator('.counter-name').first().textContent(), 'time');
   await page.reload();
-  await load('left.json', leftFixture()); await remaining(31);
+  await load('left.json', leftFixture());
+  await counterValue('训练进度', '1/32');
   assert.deepEqual(await page.locator('.counter-name').allTextContents(), ['训练进度']);
   const bounds = await page.locator('.mine-board').boundingBox();
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 360);

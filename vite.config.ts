@@ -17,6 +17,11 @@ export default defineConfig({
           fileName: 'licenses/anon-player.txt',
           source: readFileSync(new URL('./LICENSE', import.meta.url), 'utf8'),
         });
+        this.emitFile({
+          type: 'asset',
+          fileName: 'licenses/open-minesweeper.txt',
+          source: readFileSync(new URL('./licenses/open-minesweeper.txt', import.meta.url), 'utf8'),
+        });
       },
     },
   ],

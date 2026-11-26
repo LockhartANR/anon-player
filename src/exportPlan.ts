@@ -1,5 +1,5 @@
 import { selectSound, soundLevel } from './audio';
-import type { ClickEvent, Replay } from './replay';
+import type { ClickEvent, PlayableReplay } from './replay';
 import { soundTimeline } from './soundSettings';
 import type { GroupKey, SoundSettings } from './soundSettings';
 
@@ -18,7 +18,7 @@ export type ExportReplay = {
 export type AudioCue = { start: number; buffer: AudioBuffer; gain: number };
 type ExportSegment = { replay: ExportReplay; start: number; end: number };
 
-export function createExportReplay(replay: Replay, bytes: ArrayBuffer): ExportReplay {
+export function createExportReplay(replay: PlayableReplay, bytes: ArrayBuffer): ExportReplay {
   return {
     key: Symbol(), filename: replay.filename, bytes, durationMs: replay.durationMs,
     playerIdentifier: replay.playerIdentifier, clickEvents: replay.clickEvents, holdSeconds: 1,

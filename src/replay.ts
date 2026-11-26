@@ -1,5 +1,6 @@
 import { AvfVideo, EvfVideo, MvfVideo, RmvVideo } from 'ms-toollib';
 import type { GameBoard, VideoActionStateRecorder } from 'ms-toollib';
+import type { MouseTraceEvent } from '@putianyi888/vue3-minesweeper-board';
 import { boardFields } from './counterFields';
 
 const parsers = { avf: AvfVideo, evf: EvfVideo, mvf: MvfVideo, rmv: RmvVideo };
@@ -13,8 +14,27 @@ const totals = ['bbbv_solved', 'left', 'right', 'double', 'lce', 'rce', 'dce', '
 type Totals = Record<(typeof totals)[number], number>;
 
 type BoardValues = Pick<Video, (typeof boardFields)[number]>;
-export type Values = ReturnType<typeof calculateValues>;
-export type Frame = { board: Board; cursor: Cursor | null; chordHeld: boolean; values: Values };
+export type Values = ReturnType<typeof calculateValues> & { remaining?: number; solved?: number; total?: number; ces?: number; solved_s?: number };
+export type BoardPress = { row: number; column: number; chord: boolean };
+export type Frame = {
+  board: Board; cursor: Cursor | null; chordHeld: boolean; values: Values;
+  press?: BoardPress | null;
+  training?: { remaining: number; total: number; foregroundOpacity: number };
+  trace?: { events: MouseTraceEvent[]; startIndex: number; endIndex: number };
+};
+export interface PlayableReplay {
+  readonly kind: 'minesweeper' | 'left-click' | 'flag-chord';
+  readonly filename: string;
+  readonly durationMs: number;
+  readonly rows: number;
+  readonly columns: number;
+  readonly clickEvents: ClickEvent[];
+  readonly format: string;
+  readonly playerIdentifier: string;
+  readonly completed: boolean;
+  frameAt(ms: number): Frame;
+  close(): void;
+}
 const zero: Totals = { bbbv_solved: 0, left: 0, right: 0, double: 0, lce: 0, rce: 0, dce: 0, path: 0, flag: 0 };
 const stnbCoefficients: Partial<Record<number, number>> = { 3: 36, 4: 162, 5: 435 };
 const rightHeldStates = new Set([2, 3, 5, 6]);
@@ -89,6 +109,7 @@ export function eventBoundary<T>(events: ArrayLike<T>, target: number, timeOf: (
 }
 
 export class Replay {
+  readonly kind = 'minesweeper' as const;
   readonly durationMs: number;
   readonly rows: number;
   readonly columns: number;
@@ -159,7 +180,7 @@ export class Replay {
 
   static open(filename: string, bytes: ArrayBuffer): Replay {
     const extension = filename.split('.').at(-1)?.toLowerCase() ?? '';
-    if (!Object.hasOwn(parsers, extension)) throw new Error('请选择 EVF、AVF、MVF 或 RMV 录像。');
+    if (!Object.hasOwn(parsers, extension)) throw new Error('请选择 EVF、AVF、MVF、RMV 或小游戏 JSON 录像。');
     if (bytes.byteLength === 0) throw new Error('录像文件为空。');
     const Parser = parsers[extension as keyof typeof parsers];
     const video = new Parser(new Uint8Array(bytes), filename);

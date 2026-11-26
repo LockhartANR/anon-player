@@ -1,9 +1,10 @@
 import type { Frame } from './replay';
 
-type Cell = { row: number; column: number };
+type Cell = { row: number; column: number; chord?: boolean };
 const flatCells = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 14, 15, 18]);
 
-export function chordCell({ board, cursor, chordHeld }: Frame): Cell | undefined {
+export function chordCell({ board, cursor, chordHeld, press }: Frame): Cell | undefined {
+  if (press !== undefined) return press ?? undefined;
   if (!chordHeld || !cursor) return undefined;
   const row = Math.floor(cursor.y);
   const column = Math.floor(cursor.x);
@@ -12,5 +13,6 @@ export function chordCell({ board, cursor, chordHeld }: Frame): Cell | undefined
 
 export function pressedBackground(board: Frame['board'], press: Cell): boolean[][] {
   return board.map((row, y) => row.map((cell, x) => cell !== 11 &&
-    (flatCells.has(cell) || (Math.abs(y - press.row) <= 1 && Math.abs(x - press.column) <= 1))));
+    (flatCells.has(cell) || (press.chord === false ? y === press.row && x === press.column
+      : Math.abs(y - press.row) <= 1 && Math.abs(x - press.column) <= 1))));
 }

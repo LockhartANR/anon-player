@@ -4,9 +4,10 @@ import { exportSampleRate, writeExportAudio } from './exportAudio';
 import type { ExportMusic } from './exportAudio';
 import { createExportPicture } from './exportPicture';
 import type { ExportPlan, ExportVideoSettings } from './exportPlan';
-import { Replay } from './replay';
+import type { PlayableReplay } from './replay';
+import { openReplay } from './replaySource';
 
-export async function exportMp4(plan: ExportPlan, settings: ExportVideoSettings, counters: Counter[], music: ExportMusic | undefined, signal: AbortSignal, progress: (ratio: number) => void): Promise<Blob> {
+export async function exportMp4(plan: ExportPlan, settings: ExportVideoSettings, counters: Counter[], music: ExportMusic | undefined, signal: AbortSignal, progress: (ratio: number) => void, trainingCounters: Counter[]): Promise<Blob> {
   signal.throwIfAborted();
   const { width, height, fps, bitrate } = settings;
   const frameDuration = 1 / fps;
@@ -25,7 +26,7 @@ export async function exportMp4(plan: ExportPlan, settings: ExportVideoSettings,
   }
   if (!audioSupported) throw new Error('当前浏览器无法使用 AAC 编码，请用支持 AAC 编码的浏览器打开。');
 
-  const picture = createExportPicture(counters, width, height);
+  const picture = createExportPicture(counters, width, height, trainingCounters);
   try {
     const target = new BufferTarget();
     const output = new Output({ format: new Mp4OutputFormat({ fastStart: false }), target });
@@ -44,7 +45,7 @@ export async function exportMp4(plan: ExportPlan, settings: ExportVideoSettings,
     async function writeVideo() {
       let segmentIndex = 0;
       let activeSegment = -1;
-      let replay: Replay | undefined;
+      let replay: PlayableReplay | undefined;
       let lastYield = performance.now();
       try {
         for (let index = 0; index < frameCount; index++) {
@@ -57,7 +58,7 @@ export async function exportMp4(plan: ExportPlan, settings: ExportVideoSettings,
           if (activeSegment !== segmentIndex) {
             replay?.close();
             replay = undefined;
-            replay = Replay.open(input.filename, input.bytes);
+            replay = openReplay(input.filename, input.bytes);
             activeSegment = segmentIndex;
           }
           const localMs = index === frameCount - 1 ? input.durationMs : Math.min(input.durationMs, (timestamp - start) * 1000);

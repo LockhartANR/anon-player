@@ -35,6 +35,21 @@ export function createDefaultCounters(): Counter[] {
   return defaultCounterRows.map(([name, formula]) => ({ id: crypto.randomUUID(), name, formula }));
 }
 
+export const trainingCounterRows: readonly (readonly [string, string])[] = [
+  ['用时', 'roundTo(time, 3) || "/" || roundTo(rtime, 3)'],
+  ['完成', 'solved || "/" || total'],
+  ['剩余', 'remaining'],
+  ['完成速度', 'roundTo(solved_s, 3)'],
+  ['左键训练 CES', 'roundTo(ces, 3)'],
+  ['左键', 'left || "@" || roundTo(left_s, 3)'],
+  ['右键', 'right || "@" || roundTo(right_s, 3)'],
+  ['双键', 'double || "@" || roundTo(double_s, 3)'],
+  ['鼠标路程（格）', 'roundTo(path / pix_size, 3)'],
+];
+export function createTrainingCounters(): Counter[] {
+  return trainingCounterRows.map(([name, formula]) => ({ id: crypto.randomUUID(), name, formula }));
+}
+
 function numeric(value: CounterValue): number {
   return typeof value === 'number' ? value : typeof value === 'object' ? value.value : NaN;
 }
@@ -142,11 +157,17 @@ export function serializeCounters(counters: readonly Counter[]): string {
   return JSON.stringify(counters.map(({ name, formula }) => [name, formula]), null, 2);
 }
 
-export function saveCounters(counters: readonly Counter[]) {
-  localStorage.setItem(storageKey, serializeCounters(counters));
+export function saveCounters(counters: readonly Counter[], training = false) {
+  localStorage.setItem(training ? 'anon-player:training-counters:v1' : storageKey, serializeCounters(counters));
 }
 
-export function readCounters(): Counter[] {
+export function readCounters(training = false): Counter[] {
+  if (training) {
+    try {
+      const saved = localStorage.getItem('anon-player:training-counters:v1');
+      return saved === null ? createTrainingCounters() : parseCounterConfig(saved);
+    } catch { return createTrainingCounters(); }
+  }
   try {
     const saved = localStorage.getItem(storageKey);
     // A saved empty array is intentional, and must not be replaced by defaults.

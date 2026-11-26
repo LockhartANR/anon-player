@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
 import Icon from './Icon.vue';
-import { compileCounters, createDefaultCounters, formatCounterValue, parseCounterConfig, saveCounters, serializeCounters, validateCounter } from './counters';
+import { compileCounters, createDefaultCounters, createTrainingCounters, formatCounterValue, parseCounterConfig, saveCounters, serializeCounters, validateCounter } from './counters';
 import type { Counter } from './counters';
 import { counterFieldGroups } from './counterFields';
 import type { Values } from './replay';
 
-const props = defineProps<{ counters: Counter[]; values?: Values }>();
+const props = defineProps<{ counters: Counter[]; values?: Values; training?: boolean }>();
 const emit = defineEmits<{ change: [counters: Counter[]] }>();
 const draft = ref<Counter>();
 const developer = ref(false);
@@ -33,7 +33,7 @@ const rows = computed(() => {
 });
 
 function commit(next: Counter[]) {
-  try { saveCounters(next); }
+  try { saveCounters(next, props.training); }
   catch { error.value = '计数器配置无法保存到此浏览器。'; return false; }
   emit('change', next);
   error.value = '';
@@ -61,7 +61,7 @@ function remove(id: string) {
 }
 function restoreDefaults() {
   if (!window.confirm('恢复默认计数器？当前计数器和排序将被默认列表替换。')) return;
-  if (commit(createDefaultCounters())) {
+  if (commit(props.training ? createTrainingCounters() : createDefaultCounters())) {
     draft.value = undefined;
     developer.value = false;
     configDraft.value = '';
@@ -176,7 +176,7 @@ function saveConfig() {
 <template>
   <section class="counter-section" aria-label="计数器">
     <div class="panel-heading">
-      <h2>计数器</h2>
+      <h2>{{ training ? '训练计数器' : '计数器' }}</h2>
       <div class="counter-panel-actions">
         <button type="button" class="text-button counter-reset" @click="restoreDefaults">恢复默认计数器</button>
         <button v-if="!developer" type="button" class="icon-button add-counter" aria-label="添加计数器" title="添加计数器" @click="edit()"><Icon name="plus" :size="18" /></button>
@@ -235,6 +235,7 @@ function saveConfig() {
         <h3>{{ group.label }}</h3><div><code v-for="key in group.fields" :key="key">{{ key }}</code></div>
       </section>
       <p>支持算术和括号；用 || 拼接字符串或数值，roundTo(value, 0–6) 保留小数位。rtime 与 duration 均为整局秒数。</p>
+      <p v-if="training">solved、total、remaining 表示安全格或题目数量。CES 为左键训练有效点击速度，扣除开始计时的首击。3BV 等不适用字段显示 —。</p>
     </details>
   </section>
 </template>

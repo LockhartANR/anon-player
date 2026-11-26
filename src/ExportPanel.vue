@@ -10,7 +10,7 @@ import type { SoundSettings } from './soundSettings';
 import { soundStorageBlockedMessage, soundStorageUpgradeBlocked } from './soundSettings';
 import { musicTracks } from './musicTracks';
 
-const props = defineProps<{ sound: ClickAudio; settings: SoundSettings; soundsReady: boolean; counters: Counter[] }>();
+const props = defineProps<{ sound: ClickAudio; settings: SoundSettings; soundsReady: boolean; counters: Counter[]; trainingCounters: Counter[] }>();
 const emit = defineEmits<{ start: [] }>();
 const replays = defineModel<ExportReplay[]>('queue', { required: true });
 const error = ref('');
@@ -187,7 +187,7 @@ function discardResult() {
   resultUrl.value = '';
 }
 
-watch([width, height, fps, mbps, replays, music, musicVolume, () => props.counters, () => props.settings], () => {
+watch([width, height, fps, mbps, replays, music, musicVolume, () => props.counters, () => props.trainingCounters, () => props.settings], () => {
   exportRevision++;
   if (resultUrl.value) {
     discardResult();
@@ -205,6 +205,7 @@ async function startExport() {
   const snapshot = planExport(replays.value.map((replay) => ({ ...replay })), cues.value, Number(fps.value));
   const video = { width: Number(width.value), height: Number(height.value), fps: Number(fps.value), bitrate: bitrate.value };
   const counters = props.counters.map((value) => ({ ...value }));
+  const trainingCounters = props.trainingCounters.map((value) => ({ ...value }));
   const background = music.value ? { buffer: music.value.buffer, volume: musicVolume.value } : undefined;
   const controller = new AbortController();
   job.value = controller;
@@ -215,7 +216,7 @@ async function startExport() {
   status.value = '';
   try {
     const { exportMp4 } = await import('./exportMp4');
-    const mp4 = await exportMp4(snapshot, video, counters, background, controller.signal, (ratio) => { progress.value = ratio; });
+    const mp4 = await exportMp4(snapshot, video, counters, background, controller.signal, (ratio) => { progress.value = ratio; }, trainingCounters);
     controller.signal.throwIfAborted();
     resultUrl.value = URL.createObjectURL(mp4);
     progress.value = 1;

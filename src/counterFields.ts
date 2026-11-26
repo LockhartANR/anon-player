@@ -9,5 +9,6 @@ export const counterFieldGroups = [
   { label: '效率', fields: ['corr', 'ioe', 'thrp'] },
   { label: '速度评分与折算用时', fields: ['stnb', 'etime', 'rqp', 'qg', 'iqg'] },
   { label: '棋盘与难度', fields: boardFields },
+  { label: '小游戏训练', fields: ['total', 'solved', 'remaining', 'solved_s', 'ces'] },
 ] as const satisfies readonly { label: string; fields: readonly (keyof Values)[] }[];
 export const valueNames = counterFieldGroups.flatMap(({ fields }) => [...fields]);

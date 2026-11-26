@@ -7,11 +7,15 @@ import SoundEditor from './SoundEditor.vue';
 import { ClickAudio } from './audio';
 import CounterEditor from './CounterEditor.vue';
 import { readCounters } from './counters';
+import type { Counter } from './counters';
 import { createExportReplay } from './exportPlan';
 import type { ExportReplay } from './exportPlan';
 import { fetchOpenMsReplay, openmsOrigin, parseOpenMsReplayId } from './openmsReplay';
-import { Replay } from './replay';
-import type { Frame } from './replay';
+import type { Frame, PlayableReplay } from './replay';
+import { isTrainingFilename, openReplay } from './replaySource';
+import TrainingImport from './TrainingImport.vue';
+import { hasTrainingMetadata, packTrainingFile, parseTrainingFile } from './trainingReplay';
+import type { TrainingFile, TrainingMetadata } from './trainingReplay';
 import { cloneSoundSettings, defaultSounds, readSoundProfile, readSounds, saveSounds } from './soundSettings';
 import type { GroupKey, SoundAsset, SoundSettings } from './soundSettings';
 import { loadSoundPreset } from './soundPresets';
@@ -31,8 +35,9 @@ const canQueueCurrentReplay = computed(() => !!currentExportReplay.value && !loa
 const onlineDialog = ref<HTMLDialogElement>();
 const onlineInput = ref('');
 const onlineError = ref('');
-const replay = shallowRef<Replay>();
+const replay = shallowRef<PlayableReplay>();
 const frame = shallowRef<Frame>();
+const trainingImport = shallowRef<{ file: TrainingFile; finish: (metadata?: TrainingMetadata) => void }>();
 const loadSource = ref<'local' | 'openms'>();
 const loading = computed(() => loadSource.value !== undefined);
 const onlineLoading = computed(() => loadSource.value === 'openms');
@@ -63,6 +68,7 @@ let queueHintTimer = 0;
 const duration = computed(() => replay.value?.durationMs ?? 0);
 const progress = computed(() => duration.value ? 100 * position.value / duration.value : 0);
 const values = computed(() => frame.value?.values);
+const isTraining = computed(() => replay.value !== undefined && replay.value.kind !== 'minesweeper');
 
 function elapsedTime(ms: number) {
   return (ms / 1000).toFixed(3);
@@ -183,9 +189,19 @@ async function loadReplay(source: 'local' | 'openms', read: (signal: AbortSignal
   fileError.value = '';
   loadSource.value = source;
   try {
-    const { filename, bytes } = await read(request.signal);
+    let { filename, bytes } = await read(request.signal);
     request.signal.throwIfAborted();
-    const next = Replay.open(filename, bytes);
+    let trainingFile: TrainingFile | undefined;
+    if (isTrainingFilename(filename)) {
+      trainingFile = parseTrainingFile(bytes);
+      if (!hasTrainingMetadata(trainingFile)) {
+        const metadata = await completeTrainingFile(trainingFile, request.signal);
+        bytes = packTrainingFile(trainingFile, metadata);
+        trainingFile = { ...trainingFile, ...metadata };
+      }
+    }
+    request.signal.throwIfAborted();
+    const next = openReplay(filename, bytes, trainingFile);
     try {
       const first = next.frameAt(0);
       replay.value?.close();
@@ -201,7 +217,7 @@ async function loadReplay(source: 'local' | 'openms', read: (signal: AbortSignal
     }
     return true;
   } catch (error) {
-    if (!request.signal.aborted) {
+    if (!request.signal.aborted && !(error instanceof DOMException && error.name === 'AbortError')) {
       const detail = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
       const message = detail && /[\u3400-\u9fff]/.test(detail) ? detail : '无法读取这份录像，请检查格式或尝试其他文件。';
       if (source === 'openms') onlineError.value = message;
@@ -214,6 +230,21 @@ async function loadReplay(source: 'local' | 'openms', read: (signal: AbortSignal
       loadSource.value = undefined;
     }
   }
+}
+
+function completeTrainingFile(file: TrainingFile, signal: AbortSignal): Promise<TrainingMetadata> {
+  return new Promise((resolve, reject) => {
+    function finish(metadata?: TrainingMetadata) {
+      signal.removeEventListener('abort', abort);
+      if (trainingImport.value?.finish === finish) trainingImport.value = undefined;
+      if (metadata) resolve(metadata);
+      else reject(new DOMException('Import cancelled', 'AbortError'));
+    }
+    function abort() { finish(); }
+    trainingImport.value = { file, finish };
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+  });
 }
 
 function loadFiles(files: File[]) {
@@ -441,6 +472,11 @@ async function previewSound(group: GroupKey, id: string) {
 }
 
 const counters = ref(readCounters());
+const trainingCounters = ref(readCounters(true));
+function updateCounters(next: Counter[]) {
+  if (isTraining.value) trainingCounters.value = next;
+  else counters.value = next;
+}
 
 onMounted(async () => {
   window.addEventListener('pointerdown', dismissReplaySources);
@@ -481,7 +517,7 @@ onBeforeUnmount(() => {
       <img class="brand-mark" src="./favicon.png" width="34" height="34" alt="" />
       <h1>Anon Player</h1>
     </div>
-    <input ref="fileInput" type="file" accept=".evf,.avf,.mvf,.rmv" hidden aria-label="录像文件" @change="chooseFile" />
+    <input ref="fileInput" type="file" accept=".evf,.avf,.mvf,.rmv,.json" hidden aria-label="录像文件" @change="chooseFile" />
     <div class="topbar-actions">
       <button class="button primary" type="button" @click="openLocalReplay"><Icon name="upload" :size="17" /> 导入录像</button>
       <button class="button secondary" type="button" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开开源扫雷网录像</button>
@@ -502,6 +538,8 @@ onBeforeUnmount(() => {
       </div>
     </form>
   </dialog>
+
+  <TrainingImport v-if="trainingImport" :file="trainingImport.file" @confirm="trainingImport?.finish($event)" @cancel="trainingImport?.finish()" />
 
   <main class="workspace">
     <section class="player" aria-label="录像播放器">
@@ -524,12 +562,12 @@ onBeforeUnmount(() => {
         </div>
         <div v-else class="empty-workbench">
           <div class="empty-icon"><Icon name="upload" :size="30" /></div>
-          <h3>{{ loading ? '正在读取录像' : '拖入扫雷录像' }}</h3>
+          <h3>{{ loading ? '正在读取录像' : '拖入录像' }}</h3>
           <div class="empty-actions">
             <button type="button" class="button secondary" :disabled="loading" @click="openLocalReplay"><Icon name="upload" :size="17" /> 选择本地文件</button>
             <button type="button" class="button secondary" :disabled="loading" @click="openOnlineDialog"><Icon name="link" :size="17" /> 打开开源扫雷网录像</button>
           </div>
-          <div class="formats" aria-label="支持格式"><span v-for="format in ['EVF', 'AVF', 'MVF', 'RMV']" :key="format">{{ format }}</span></div>
+          <div class="formats" aria-label="支持格式"><span v-for="format in ['EVF', 'AVF', 'MVF', 'RMV', 'JSON 左键 / 标双']" :key="format">{{ format }}</span></div>
         </div>
         <div v-if="dragDepth > 0 && frame" class="drop-overlay">松开以打开录像</div>
       </div>
@@ -568,7 +606,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <ExportPanel ref="exportPanel" v-model:queue="exportQueue" :sound="sound" :settings="settings" :sounds-ready="soundsReady" :counters="counters" @start="pauseClock" />
+    <ExportPanel ref="exportPanel" v-model:queue="exportQueue" :sound="sound" :settings="settings" :sounds-ready="soundsReady" :counters="counters" :training-counters="trainingCounters" @start="pauseClock" />
 
     <aside class="side-panel" aria-label="数据和音效">
       <nav class="panel-tabs" aria-label="播放器面板">
@@ -577,7 +615,7 @@ onBeforeUnmount(() => {
       </nav>
 
       <div v-show="tab === 'stats'" class="stats-panel">
-        <CounterEditor :counters="counters" :values="values" @change="counters = $event" />
+        <CounterEditor :key="isTraining ? 'training' : 'minesweeper'" :counters="isTraining ? trainingCounters : counters" :values="values" :training="isTraining" @change="updateCounters" />
       </div>
 
       <SoundEditor v-show="tab === 'audio'" :settings="settings" :ready="soundsReady" :bad-assets="badAssets" :error="audioError" :apply-profile="switchSoundProfile"
